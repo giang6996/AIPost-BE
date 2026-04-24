@@ -1,0 +1,303 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum SiteStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+}
+
+enum SyncStatus {
+  DRAFT
+  PUBLISHED
+  UPDATED
+  FAILED
+}
+
+enum ImageSourceType {
+  GENERATED
+  UPLOADED
+}
+
+enum ImageInsertType {
+  AFTER_HEADING
+  INSIDE_SECTION_START
+  INSIDE_SECTION_END
+  AFTER_PARAGRAPH_IN_SECTION
+  END_OF_ARTICLE
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users User[]
+
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String  @unique
+  name      String
+  roleId    Int
+  status    UserStatus  @default(ACTIVE)
+
+  role              Role              @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  credential        UserCredential?
+  sessions          UserSession[]
+
+  sites     WpSite[]
+  drafts    Draft[]
+  aiProviderConfigs AiProviderConfig[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usageLogs UsageLog[]
+
+  @@index([roleId])
+  @@index([status])
+}
+
+model UserCredential {
+  id                Int      @id @default(autoincrement())
+  userId            Int      @unique
+  passwordHash      String
+  passwordUpdatedAt DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserSession {
+  id               Int       @id @default(autoincrement())
+  userId           Int
+  sessionTokenHash String    @unique
+  expiresAt        DateTime
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+model AiProviderConfig {
+  id                Int      @id @default(autoincrement())
+  userId            Int
+  provider          String
+  apiKeyEncrypted   String
+  defaultTextModel  String?
+  defaultImageModel String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+model WpSite {
+  id                           Int        @id @default(autoincrement())
+  userId                       Int
+  siteName                     String
+  siteUrl                      String
+  wpUsername                   String
+  wpApplicationPasswordEncrypted String
+  snippetEnabled               Boolean    @default(false)
+  status                       SiteStatus @default(INACTIVE)
+  createdAt                    DateTime   @default(now())
+  updatedAt                    DateTime   @updatedAt
+
+  drafts Draft[]
+  postSyncs WpPostSync[]
+  draftCategories  DraftCategory[]
+  draftTags        DraftTag[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@unique([userId, siteUrl])
+}
+
+model WpPostSync {
+  id           Int        @id @default(autoincrement())
+  draftId      Int
+  siteId       Int
+  wpPostId     Int?
+  wpPostUrl    String?
+  lastSyncedAt DateTime?
+  syncStatus   SyncStatus @default(DRAFT)
+  syncMessage  String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  draft Draft  @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  site  WpSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([draftId])
+  @@index([siteId])
+  @@unique([draftId, siteId])
+}
+
+enum DraftStatus {
+  DRAFT
+  READY
+  PUBLISHED
+  FAILED
+}
+
+model Draft {
+  id               Int         @id @default(autoincrement())
+  userId           Int
+  defaultSiteId    Int?
+  title            String
+  slug             String?
+  excerpt          String?
+  contentHtml      String
+  featuredImageUrl String?
+  featuredImageAlt String?
+  featuredImageId Int?
+  images DraftImage[]
+  status           DraftStatus @default(DRAFT)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  postSyncs WpPostSync[]
+  categories DraftCategory[]
+  tags DraftTag[]
+  seoMeta DraftSeoMeta?
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultSite WpSite? @relation(fields: [defaultSiteId], references: [id], onDelete: SetNull)
+  featuredImage   DraftImage? @relation("DraftFeaturedImage", fields: [featuredImageId], references: [id], onDelete: SetNull)
+
+  usageLogs UsageLog[]
+  
+  @@index([userId])
+  @@index([defaultSiteId])
+  @@index([status])
+  @@index([featuredImageId])
+}
+
+model DraftCategory {
+  id           Int      @id @default(autoincrement())
+  draftId       Int
+  siteId        Int
+  wpCategoryId  Int
+  categoryName  String
+  slug          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  draft Draft  @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  site  WpSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([draftId])
+  @@index([siteId])
+  @@index([wpCategoryId])
+  @@unique([draftId, siteId, wpCategoryId])
+}
+
+model DraftTag {
+  id       Int      @id @default(autoincrement())
+  draftId  Int
+  siteId   Int
+  wpTagId  Int
+  tagName  String
+  slug     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  draft Draft  @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  site  WpSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([draftId])
+  @@index([siteId])
+  @@index([wpTagId])
+  @@unique([draftId, siteId, wpTagId])
+}
+
+model DraftSeoMeta {
+  id              Int      @id @default(autoincrement())
+  draftId         Int      @unique
+  seoTitle        String?
+  metaDescription String?
+  canonicalUrl    String?
+  focusKeyword    String?
+  ogTitle         String?
+  ogDescription   String?
+  ogImageUrl      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+}
+
+model DraftImage {
+  id             Int             @id @default(autoincrement())
+  draftId        Int
+  sourceType     ImageSourceType
+  localPath      String?
+  remoteUrl      String?
+  wpMediaId      Int?
+  altText        String?
+  caption        String?
+  positionMarker String?
+  insertType              ImageInsertType?
+  targetHeadingText       String?
+  targetHeadingLevel      Int?
+  paragraphIndexInSection Int?
+  isInserted              Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  featuredInDrafts Draft[] @relation("DraftFeaturedImage")
+
+  @@index([draftId])
+}
+
+model UsageLog {
+  id            Int      @id @default(autoincrement())
+  draftId       Int?
+  userId        Int
+  actionType    String
+  modelName     String
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  imageCount    Int      @default(0)
+  estimatedCost Float    @default(0)
+  createdAt     DateTime @default(now())
+
+  draft Draft? @relation(fields: [draftId], references: [id], onDelete: SetNull)
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([draftId])
+  @@index([userId])
+  @@index([actionType])
+}
