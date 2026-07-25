@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const mediaController_1 = require("../controllers/mediaController");
+const upload_1 = require("../middleware/upload");
+const router = (0, express_1.Router)();
+router.get('/drafts/:id/images', mediaController_1.listDraftImagesHandler);
+router.post('/drafts/:id/images/upload', upload_1.upload.single('image'), mediaController_1.uploadDraftImageHandler);
+router.post('/drafts/:id/images/:imageId/upload-to-wp', mediaController_1.uploadDraftImageToWpHandler);
+router.post('/drafts/:id/images/:imageId/set-featured', mediaController_1.setDraftFeaturedImageHandler);
+router.post('/drafts/:id/images/:imageId/insert', mediaController_1.insertDraftImageHandler);
+router.post('/drafts/:id/images/save-generated', mediaController_1.saveGeneratedDraftImageHandler);
+router.put('/drafts/:id/images/:imageId', mediaController_1.updateDraftImageHandler);
+router.delete('/drafts/:id/images/:imageId', mediaController_1.deleteDraftImageHandler);
+exports.default = router;
