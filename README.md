@@ -45,6 +45,8 @@ Backend API for managing AI-assisted content drafting, WordPress site sync, medi
    ENCRYPTION_KEY="12345678901234567890123456789012"
    ```
 
+   These values are for local development only. In prod, `DATABASE_URL` and `ENCRYPTION_KEY` should come from AWS Systems Manager Parameter Store.
+
 3. Apply Prisma migrations:
 
    ```bash
@@ -67,33 +69,44 @@ The server listens on `http://localhost:3001` by default.
 
 ## Environment Variables
 
-- `PORT` — server port, defaults to `3001`
-- `NODE_ENV` — runtime mode, defaults to `development`
-- `DATABASE_URL` — required PostgreSQL connection string
-- `ENCRYPTION_KEY` — used for encrypted credentials and API config storage; defaults to a 32-character fallback in code, but should be set explicitly
+- `PORT` - server port, defaults to `3001` for local development
+- `NODE_ENV` - runtime mode, defaults to `development`
+- `DATABASE_URL` - required PostgreSQL connection string
+- `ENCRYPTION_KEY` - required secret used for encrypted credentials and API config storage
+- `AWS_REGION` - required in production when loading secrets from SSM
+- `SSM_PARAMETER_PREFIX` or `SSM_PARAMETER_PATH` - required in production; points to a parameter path such as `/aipost/prod`
+
+Production secret loading process:
+
+- Create `SecureString` parameters in SSM for `DATABASE_URL` and `ENCRYPTION_KEY`
+- Use a path such as `/aipost/prod/DATABASE_URL` and `/aipost/prod/ENCRYPTION_KEY`
+- Set `AWS_REGION` and `SSM_PARAMETER_PREFIX` in the production runtime environment
+- Keep local `.env` and test `.env.test` values separate from production values
+
+The backend reads local env files during development, but production should inject secrets from AWS instead of relying on checked-in files or hardcoded defaults.
 
 ## Scripts
 
-- `npm run dev` — start the API in development mode with live reload
-- `npm test` — run the test suite once
-- `npm run test:watch` — run tests in watch mode
-- `npm run test:coverage` — run tests with coverage output
+- `npm run dev` - start the API in development mode with live reload
+- `npm test` - run the test suite once
+- `npm run test:watch` - run tests in watch mode
+- `npm run test:coverage` - run tests with coverage output
 
 ## API Overview
 
-- `GET /health` — health check
-- `POST /auth/register`, `POST /auth/login` — account access
-- `GET /auth/me`, `POST /auth/logout`, `PUT /auth/profile`, `PUT /auth/password` — authenticated account actions
-- `GET /ai/config`, `POST /ai/config`, `PUT /ai/config`, `DELETE /ai/config` — AI provider settings
-- `POST /ai/generate-image`, `POST /ai/generate-post`, `POST /ai/generate-title`, `POST /ai/generate-seo`, `POST /ai/rewrite-section` — AI generation helpers
-- `GET /sites`, `POST /sites`, `PUT /sites/:id`, `DELETE /sites/:id` — WordPress site management
-- `GET /drafts`, `POST /drafts`, `PUT /drafts/:id`, `DELETE /drafts/:id` — draft management
-- `POST /drafts/:id/publish` — publish a draft
-- `GET /drafts/:id/seo`, `PUT /drafts/:id/seo` — SEO metadata
-- `GET /drafts/:id/categories`, `PUT /drafts/:id/categories` — draft categories
-- `GET /drafts/:id/tags`, `PUT /drafts/:id/tags` — draft tags
-- `GET /drafts/:id/images` and related `/drafts/:id/images/*` routes — image upload and placement
-- `GET /admin/users`, `/admin/drafts`, `/admin/sites` and related routes — admin-only operations
+- `GET /health` - health check
+- `POST /auth/register`, `POST /auth/login` - account access
+- `GET /auth/me`, `POST /auth/logout`, `PUT /auth/profile`, `PUT /auth/password` - authenticated account actions
+- `GET /ai/config`, `POST /ai/config`, `PUT /ai/config`, `DELETE /ai/config` - AI provider settings
+- `POST /ai/generate-image`, `POST /ai/generate-post`, `POST /ai/generate-title`, `POST /ai/generate-seo`, `POST /ai/rewrite-section` - AI generation helpers
+- `GET /sites`, `POST /sites`, `PUT /sites/:id`, `DELETE /sites/:id` - WordPress site management
+- `GET /drafts`, `POST /drafts`, `PUT /drafts/:id`, `DELETE /drafts/:id` - draft management
+- `POST /drafts/:id/publish` - publish a draft
+- `GET /drafts/:id/seo`, `PUT /drafts/:id/seo` - SEO metadata
+- `GET /drafts/:id/categories`, `PUT /drafts/:id/categories` - draft categories
+- `GET /drafts/:id/tags`, `PUT /drafts/:id/tags` - draft tags
+- `GET /drafts/:id/images` and related `/drafts/:id/images/*` routes - image upload and placement
+- `GET /admin/users`, `/admin/drafts`, `/admin/sites` and related routes - admin-only operations
 
 ## Storage
 
@@ -112,14 +125,14 @@ npm test
 
 ## Project Structure
 
-- `src/app.ts` — Express app setup and route registration
-- `src/server.ts` — server entrypoint
-- `src/controllers/` — request handlers
-- `src/routes/` — route definitions
-- `src/services/` — business logic
-- `src/middleware/` — auth, roles, and upload middleware
-- `src/utils/` — shared helpers
-- `prisma/` — Prisma schema, migrations, and seed scripts
+- `src/app.ts` - Express app setup and route registration
+- `src/server.ts` - server entrypoint
+- `src/controllers/` - request handlers
+- `src/routes/` - route definitions
+- `src/services/` - business logic
+- `src/middleware/` - auth, roles, and upload middleware
+- `src/utils/` - shared helpers
+- `prisma/` - Prisma schema, migrations, and seed scripts
 
 ## Notes
 
