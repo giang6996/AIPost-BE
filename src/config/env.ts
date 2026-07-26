@@ -10,9 +10,18 @@ function requireEnv(name: string): string {
   return value
 }
 
+function parseCsv(value: string): string[] {
+  // Keep comma-separated runtime config easy to deploy across local, staging, and prod.
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}
+
 export const env = {
   port: Number(process.env.PORT ?? 3001),
   nodeEnv: process.env.NODE_ENV ?? 'development',
   databaseUrl: requireEnv('DATABASE_URL'),
   encryptionKey: requireEnv('ENCRYPTION_KEY'),
+  corsOrigins: parseCsv(requireEnv('CORS_ORIGINS')),
 }

@@ -73,6 +73,7 @@ The server listens on `http://localhost:3001` by default.
 - `NODE_ENV` - runtime mode, defaults to `development`
 - `DATABASE_URL` - required PostgreSQL connection string
 - `ENCRYPTION_KEY` - required secret used for encrypted credentials and API config storage
+- `CORS_ORIGINS` - comma-separated frontend origin allowlist, such as `http://localhost:5173` for local dev or `https://app.yourdomain.com` for production
 - `AWS_REGION` - required in production when loading secrets from SSM
 - `SSM_PARAMETER_PREFIX` or `SSM_PARAMETER_PATH` - required in production; points to a parameter path such as `/aipost/prod`
 
@@ -81,6 +82,7 @@ Production secret loading process:
 - Create `SecureString` parameters in SSM for `DATABASE_URL` and `ENCRYPTION_KEY`
 - Use a path such as `/aipost/prod/DATABASE_URL` and `/aipost/prod/ENCRYPTION_KEY`
 - Set `AWS_REGION` and `SSM_PARAMETER_PREFIX` in the production runtime environment
+- Set `CORS_ORIGINS` to the production frontend domain(s) so browser requests are allowed
 - Keep local `.env` and test `.env.test` values separate from production values
 
 The backend reads local env files during development, but production should inject secrets from AWS instead of relying on checked-in files or hardcoded defaults.

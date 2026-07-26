@@ -6,12 +6,15 @@ import mediaRoutes from './routes/mediaRoutes'
 import aiRoutes from './routes/aiRoute'
 import authRoutes from './routes/authRoute'
 import adminRoutes from './routes/adminRoute'
+import { env } from './config/env.js'
 
 const app = express()
 const cors = require('cors')
 
 app.use(cors({
-  origin: 'http://localhost:5173',
+  // CORS must stay strict because API uses credentialed browser requests.
+  // Only explicitly allowed frontend origins should be able to call it from the browser.
+  origin: env.corsOrigins,
   credentials: true,
 }))
 
