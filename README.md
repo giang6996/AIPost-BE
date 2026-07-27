@@ -121,6 +121,16 @@ This keeps schema changes separate from the application process and makes the ru
 
 Because of that split, the container image is meant to be portable across EC2, ECS, and Kubernetes without baking secrets or migration logic into the image itself.
 
+Build and run locally with Docker:
+
+```bash
+docker build -t aipost-backend .
+docker run --rm -p 3001:3001 --env-file .env aipost-backend
+```
+
+To use different port on the host, change the left side of `-p` and keep the container side mapped to `3001`.
+
+
 ## API Overview
 
 - `GET /health` - health check

@@ -33,6 +33,6 @@
     "test:coverage": "vitest run --coverage"
   },
   "prisma": {
-    "seed": "ts-node prisma/seeds/seed.ts"
+    "seed": "tsx prisma/seeds/seed.ts"
   }
 }
