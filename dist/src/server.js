@@ -1,17 +1,22 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const storage_js_1 = require("./config/storage.js");
+const mediaStorageService_js_1 = require("./services/mediaStorageService.js");
 async function bootstrap() {
-    // Keep local/test boot simple, but pull prod secrets before any env validation runs.
+    // The app still boots locally from .env files, but production should resolve secrets from AWS first.
     if (process.env.NODE_ENV === 'production') {
+        // Import the SSM helper lazily so local/test runs do not need AWS credentials or AWS SDK work.
         const { getSsmBootstrapSummary, loadSecretsFromSsm } = await import('./config/ssm.js');
+        // Log the AWS region/path only so we can trace the bootstrap source without printing secrets.
         const summary = getSsmBootstrapSummary();
         console.log(`Loading production secrets from SSM${summary.region ? ` in ${summary.region}` : ''}${summary.prefix ? ` using ${summary.prefix}` : ''}`);
+        // Pull DATABASE_URL and ENCRYPTION_KEY into process.env before the rest of the app loads.
         await loadSecretsFromSsm();
     }
+    // Import the app only after env secrets are present, because app.ts and env.ts validate config at load time.
     const app = (await import('./app.js')).default;
     const { env } = await import('./config/env.js');
-    (0, storage_js_1.ensureStorageDirectories)();
+    // Storage setup belongs to the storage adapter so the boot path stays agnostic to disk vs cloud.
+    (0, mediaStorageService_js_1.ensureMediaStorageDirectories)();
     app.listen(env.port, () => {
         console.log(`Server running at http://localhost:${env.port}`);
     });

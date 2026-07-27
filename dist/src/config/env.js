@@ -13,9 +13,17 @@ function requireEnv(name) {
     }
     return value;
 }
+function parseCsv(value) {
+    // Keep comma-separated runtime config easy to deploy across local, staging, and prod.
+    return value
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+}
 exports.env = {
     port: Number(process.env.PORT ?? 3001),
     nodeEnv: process.env.NODE_ENV ?? 'development',
     databaseUrl: requireEnv('DATABASE_URL'),
     encryptionKey: requireEnv('ENCRYPTION_KEY'),
+    corsOrigins: parseCsv(requireEnv('CORS_ORIGINS')),
 };

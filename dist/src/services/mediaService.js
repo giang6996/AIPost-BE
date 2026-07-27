@@ -14,11 +14,10 @@ exports.setDraftFeaturedImage = setDraftFeaturedImage;
 const client_1 = require("@prisma/client");
 const imageBlock_1 = require("../utils/imageBlock");
 const prisma_1 = require("../lib/prisma");
-const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
-const crypto_1 = require("crypto");
-const crypto_2 = require("../utils/crypto");
+const crypto_1 = require("../utils/crypto");
 const wordpressService_1 = require("./wordpressService");
+const mediaStorageService_1 = require("./mediaStorageService");
 const htmlInsert_1 = require("../utils/htmlInsert");
 function getExtensionFromMimeType(mimeType) {
     switch (mimeType.toLowerCase()) {
@@ -145,11 +144,11 @@ async function saveGeneratedDraftImage(input) {
     if (!fileBuffer || fileBuffer.length === 0) {
         throw new Error("Invalid base64 image data");
     }
-    const uploadsDir = path_1.default.resolve(process.cwd(), "uploads", "generated");
-    await fs_1.default.promises.mkdir(uploadsDir, { recursive: true });
-    const fileName = `draft-${draft.id}-${Date.now()}-${(0, crypto_1.randomBytes)(6).toString("hex")}.${extension}`;
-    const localPath = path_1.default.join(uploadsDir, fileName);
-    await fs_1.default.promises.writeFile(localPath, fileBuffer);
+    const { localPath } = await (0, mediaStorageService_1.saveGeneratedImage)({
+        draftId: draft.id,
+        buffer: fileBuffer,
+        extension,
+    });
     const image = await prisma_1.prisma.draftImage.create({
         data: {
             draftId: draft.id,
@@ -207,12 +206,8 @@ async function uploadDraftImageToWp(input) {
     if (!site) {
         throw new Error("Target site not found");
     }
-    const absolutePath = path_1.default.resolve(image.localPath);
-    if (!fs_1.default.existsSync(absolutePath)) {
-        throw new Error("Local image file not found");
-    }
-    const fileBuffer = fs_1.default.readFileSync(absolutePath);
-    const filename = path_1.default.basename(absolutePath);
+    const fileBuffer = await (0, mediaStorageService_1.readImageBuffer)(image.localPath);
+    const filename = path_1.default.basename(image.localPath);
     const ext = path_1.default.extname(filename).toLowerCase();
     let mimeType = "application/octet-stream";
     if (ext === ".jpg" || ext === ".jpeg")
@@ -226,7 +221,7 @@ async function uploadDraftImageToWp(input) {
     const uploadResult = await (0, wordpressService_1.uploadWpMedia)({
         siteUrl: site.siteUrl,
         wpUsername: site.wpUsername,
-        wpApplicationPassword: (0, crypto_2.decrypt)(site.wpApplicationPasswordEncrypted),
+        wpApplicationPassword: (0, crypto_1.decrypt)(site.wpApplicationPasswordEncrypted),
         fileBuffer,
         filename,
         mimeType,
@@ -388,7 +383,7 @@ async function updateDraftImage(input) {
         const remoteUpdate = await (0, wordpressService_1.updateWpMediaMeta)({
             siteUrl: site.siteUrl,
             wpUsername: site.wpUsername,
-            wpApplicationPassword: (0, crypto_2.decrypt)(site.wpApplicationPasswordEncrypted),
+            wpApplicationPassword: (0, crypto_1.decrypt)(site.wpApplicationPasswordEncrypted),
             wpMediaId: updatedImage.wpMediaId,
             altText: input.altText !== undefined ? updatedImage.altText : undefined,
             caption: input.caption !== undefined ? updatedImage.caption : undefined,
@@ -431,10 +426,7 @@ async function deleteDraftImage(input) {
     }
     if (image.localPath) {
         try {
-            const absolutePath = path_1.default.resolve(image.localPath);
-            if (fs_1.default.existsSync(absolutePath)) {
-                await fs_1.default.promises.unlink(absolutePath);
-            }
+            await (0, mediaStorageService_1.deleteImage)(image.localPath);
         }
         catch {
             // ignore local file delete errors

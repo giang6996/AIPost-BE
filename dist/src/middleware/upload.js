@@ -6,13 +6,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.upload = void 0;
 const fs_1 = __importDefault(require("fs"));
 const multer_1 = __importDefault(require("multer"));
-const storage_1 = require("../config/storage");
-if (!fs_1.default.existsSync(storage_1.storagePaths.uploadedImageRoot)) {
-    fs_1.default.mkdirSync(storage_1.storagePaths.uploadedImageRoot, { recursive: true });
+const mediaStorageService_1 = require("../services/mediaStorageService");
+const uploadedImageRoot = (0, mediaStorageService_1.getUploadedImageRoot)();
+if (!fs_1.default.existsSync(uploadedImageRoot)) {
+    fs_1.default.mkdirSync(uploadedImageRoot, { recursive: true });
 }
 const storage = multer_1.default.diskStorage({
     destination: (_req, _file, cb) => {
-        cb(null, storage_1.storagePaths.uploadedImageRoot);
+        cb(null, uploadedImageRoot);
     },
     filename: (_req, file, cb) => {
         const timestamp = Date.now();

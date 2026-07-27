@@ -1,15 +1,16 @@
 import fs from 'fs'
 import multer from 'multer'
-import path from 'path'
-import { storagePaths } from '../config/storage'
+import { getUploadedImageRoot } from '../services/mediaStorageService'
 
-if (!fs.existsSync(storagePaths.uploadedImageRoot)) {
-  fs.mkdirSync(storagePaths.uploadedImageRoot, { recursive: true })
+const uploadedImageRoot = getUploadedImageRoot()
+
+if (!fs.existsSync(uploadedImageRoot)) {
+  fs.mkdirSync(uploadedImageRoot, { recursive: true })
 }
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    cb(null, storagePaths.uploadedImageRoot)
+    cb(null, uploadedImageRoot)
   },
   filename: (_req, file, cb) => {
     const timestamp = Date.now()

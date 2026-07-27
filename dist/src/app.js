@@ -11,10 +11,13 @@ const mediaRoutes_1 = __importDefault(require("./routes/mediaRoutes"));
 const aiRoute_1 = __importDefault(require("./routes/aiRoute"));
 const authRoute_1 = __importDefault(require("./routes/authRoute"));
 const adminRoute_1 = __importDefault(require("./routes/adminRoute"));
+const env_js_1 = require("./config/env.js");
 const app = (0, express_1.default)();
 const cors = require('cors');
 app.use(cors({
-    origin: 'http://localhost:5173',
+    // CORS must stay strict because API uses credentialed browser requests.
+    // Only explicitly allowed frontend origins should be able to call it from the browser.
+    origin: env_js_1.env.corsOrigins,
     credentials: true,
 }));
 app.use(express_1.default.json({ limit: '50mb' }));

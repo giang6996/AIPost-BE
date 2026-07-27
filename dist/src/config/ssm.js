@@ -11,6 +11,7 @@ function requireRuntimeSetting(name) {
     return value;
 }
 function normalizePrefix(prefix) {
+    // Store parameters under a shared path like /aipost/prod so each environment stays isolated.
     const trimmed = prefix.trim().replace(/\/+$/, '');
     return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 }
@@ -27,6 +28,7 @@ async function loadParameter(client, name) {
     return value;
 }
 async function loadSecretsFromSsm() {
+    // These settings are expected to come from the AWS runtime, not from checked-in files.
     const region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? null;
     const prefix = process.env.SSM_PARAMETER_PREFIX ?? process.env.SSM_PARAMETER_PATH;
     if (!region) {
@@ -38,6 +40,7 @@ async function loadSecretsFromSsm() {
     const normalizedPrefix = normalizePrefix(prefix);
     const client = new client_ssm_1.SSMClient({ region });
     // Only bootstrap the secrets the app cannot start without.
+    // SecureString parameters are fetched with decryption so the app receives plain text values.
     const [databaseUrl, encryptionKey] = await Promise.all([
         loadParameter(client, `${normalizedPrefix}/DATABASE_URL`),
         loadParameter(client, `${normalizedPrefix}/ENCRYPTION_KEY`),
@@ -49,6 +52,7 @@ async function loadSecretsFromSsm() {
     };
 }
 function getSsmBootstrapSummary() {
+    // This is only used for startup logs so we can trace which AWS settings were present.
     return {
         region: process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? null,
         prefix: process.env.SSM_PARAMETER_PREFIX ?? process.env.SSM_PARAMETER_PATH ?? null,

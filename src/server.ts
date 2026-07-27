@@ -1,5 +1,5 @@
 import type { Express } from 'express'
-import { ensureStorageDirectories } from './config/storage.js'
+import { ensureMediaStorageDirectories } from './services/mediaStorageService.js'
 
 async function bootstrap() {
   // The app still boots locally from .env files, but production should resolve secrets from AWS first.
@@ -23,8 +23,8 @@ async function bootstrap() {
   const app = (await import('./app.js')).default as unknown as Express
   const { env } = await import('./config/env.js')
 
-  // Storage directories are still created at boot for local/test; prod should eventually replace local disk storage.
-  ensureStorageDirectories()
+  // Storage setup belongs to the storage adapter so the boot path stays agnostic to disk vs cloud.
+  ensureMediaStorageDirectories()
 
   app.listen(env.port, () => {
     console.log(`Server running at http://localhost:${env.port}`)

@@ -1,6 +1,5 @@
 import { ImageSourceType, ImageInsertType } from '@prisma/client'
 import { Request, Response } from 'express'
-import path from 'path'
 import { prisma } from '../lib/prisma'
 import { 
   createDraftImage, 
@@ -11,6 +10,7 @@ import {
   saveGeneratedDraftImage,
   updateDraftImage,
   deleteDraftImage, } from '../services/mediaService'
+import { storeUploadedImage } from '../services/mediaStorageService'
 import { sendError, sendErrorNormalized, sendSuccess } from '../utils/apiResponse'
 import { getParamAsString } from '../utils/paramString'
 import { parsePositiveInt} from '../utils/positiveInt'
@@ -87,11 +87,15 @@ export async function uploadDraftImageHandler(req: Request, res: Response) {
 
     const { altText, caption, positionMarker } = req.body
 
+    const storedImage = await storeUploadedImage({
+      localPath: req.file.path,
+    })
+
     const image = await createDraftImage({
       draftId,
       userId: userId,
       sourceType: ImageSourceType.UPLOADED,
-      localPath: path.normalize(req.file.path),
+      localPath: storedImage.localPath,
       altText,
       caption,
       positionMarker,

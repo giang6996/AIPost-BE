@@ -1,11 +1,15 @@
 import { ImageSourceType, ImageInsertType } from "@prisma/client";
 import { buildImageHtmlBlock } from "../utils/imageBlock";
 import { prisma } from "../lib/prisma";
-import fs from "fs";
 import path from "path";
-import { randomBytes } from "crypto";
 import { decrypt } from "../utils/crypto";
 import { uploadWpMedia, updateWpMediaMeta } from "./wordpressService";
+import {
+  deleteImage,
+  getImagePreviewUrl,
+  readImageBuffer,
+  saveGeneratedImage,
+} from "./mediaStorageService";
 import {
   insertAfterParagraphInSection,
   insertInsideSectionEnd,
@@ -231,15 +235,11 @@ export async function saveGeneratedDraftImage(
     throw new Error("Invalid base64 image data");
   }
 
-  const uploadsDir = path.resolve(process.cwd(), "uploads", "generated");
-  await fs.promises.mkdir(uploadsDir, { recursive: true });
-
-  const fileName = `draft-${draft.id}-${Date.now()}-${randomBytes(6).toString(
-    "hex",
-  )}.${extension}`;
-
-  const localPath = path.join(uploadsDir, fileName);
-  await fs.promises.writeFile(localPath, fileBuffer);
+  const { localPath } = await saveGeneratedImage({
+    draftId: draft.id,
+    buffer: fileBuffer,
+    extension,
+  });
 
   const image = await prisma.draftImage.create({
     data: {
@@ -309,14 +309,8 @@ export async function uploadDraftImageToWp(input: UploadDraftImageToWpInput) {
     throw new Error("Target site not found");
   }
 
-  const absolutePath = path.resolve(image.localPath);
-
-  if (!fs.existsSync(absolutePath)) {
-    throw new Error("Local image file not found");
-  }
-
-  const fileBuffer = fs.readFileSync(absolutePath);
-  const filename = path.basename(absolutePath);
+  const fileBuffer = await readImageBuffer(image.localPath);
+  const filename = path.basename(image.localPath);
   const ext = path.extname(filename).toLowerCase();
 
   let mimeType = "application/octet-stream";
@@ -592,10 +586,7 @@ export async function deleteDraftImage(input: DeleteDraftImageInput) {
 
   if (image.localPath) {
     try {
-      const absolutePath = path.resolve(image.localPath)
-      if (fs.existsSync(absolutePath)) {
-        await fs.promises.unlink(absolutePath)
-      }
+      await deleteImage(image.localPath)
     } catch {
       // ignore local file delete errors
     }

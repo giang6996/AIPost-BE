@@ -1,7 +1,4 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listDraftImagesHandler = listDraftImagesHandler;
 exports.uploadDraftImageHandler = uploadDraftImageHandler;
@@ -12,8 +9,8 @@ exports.uploadDraftImageToWpHandler = uploadDraftImageToWpHandler;
 exports.setDraftFeaturedImageHandler = setDraftFeaturedImageHandler;
 exports.insertDraftImageHandler = insertDraftImageHandler;
 const client_1 = require("@prisma/client");
-const path_1 = __importDefault(require("path"));
 const mediaService_1 = require("../services/mediaService");
+const mediaStorageService_1 = require("../services/mediaStorageService");
 const apiResponse_1 = require("../utils/apiResponse");
 const paramString_1 = require("../utils/paramString");
 const positiveInt_1 = require("../utils/positiveInt");
@@ -55,11 +52,14 @@ async function uploadDraftImageHandler(req, res) {
             return (0, apiResponse_1.sendError)(res, 'No image file uploaded', { code: 'FILE_REQUIRED' }, 400);
         }
         const { altText, caption, positionMarker } = req.body;
+        const storedImage = await (0, mediaStorageService_1.storeUploadedImage)({
+            localPath: req.file.path,
+        });
         const image = await (0, mediaService_1.createDraftImage)({
             draftId,
             userId: userId,
             sourceType: client_1.ImageSourceType.UPLOADED,
-            localPath: path_1.default.normalize(req.file.path),
+            localPath: storedImage.localPath,
             altText,
             caption,
             positionMarker,
