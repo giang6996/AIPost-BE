@@ -27,8 +27,8 @@ function normalizeStorageReference(value) {
 function getUploadsRoot() {
     return normalizeSlashes(path_1.default.resolve(process.cwd(), 'uploads'));
 }
-function resolveLocalPath(localPath) {
-    return path_1.default.resolve(localPath);
+function resolveStorageReference(storageKey) {
+    return path_1.default.resolve(storageKey);
 }
 function isLocalStorage() {
     return env_1.env.mediaStorageProvider === 'local';
@@ -120,32 +120,31 @@ function ensureMediaStorageDirectories() {
 function getUploadedImageRoot() {
     return storage_1.storagePaths.uploadedImageRoot;
 }
-function getImagePreviewUrl(localPath) {
-    if (!localPath) {
+function getImagePreviewUrl(storageKey) {
+    if (!storageKey) {
         return null;
     }
     if (isLocalStorage()) {
-        const normalizedLocalPath = normalizeSlashes(resolveLocalPath(localPath));
+        const normalizedStoragePath = normalizeSlashes(resolveStorageReference(storageKey));
         const uploadsRoot = getUploadsRoot();
-        if (!normalizedLocalPath.startsWith(uploadsRoot)) {
+        if (!normalizedStoragePath.startsWith(uploadsRoot)) {
             return null;
         }
-        const relativePath = normalizedLocalPath
+        const relativePath = normalizedStoragePath
             .slice(uploadsRoot.length)
             .replace(/^\/+/, '');
         return `${getPublicBackendBaseUrl()}/uploads/${relativePath}`;
     }
-    return `${getPublicBackendBaseUrl()}/${normalizeStorageReference(localPath)}`;
+    return `${getPublicBackendBaseUrl()}/${normalizeStorageReference(storageKey)}`;
 }
 async function storeUploadedImage(input) {
-    // The DB still stores the old `localPath` field name.
-    // In S3 mode, that field becomes an opaque storage reference instead of a disk path.
+    // The DB stores a neutral storage key so the same field can point to local disk or S3.
     if (isLocalStorage()) {
-        if (!input.localPath) {
-            throw new Error('Local image path is required for local storage');
+        if (!input.storageKey) {
+            throw new Error('Storage key is required for local storage');
         }
         return {
-            localPath: path_1.default.normalize(input.localPath),
+            storageKey: path_1.default.normalize(input.storageKey),
         };
     }
     if (!input.buffer) {
@@ -158,7 +157,7 @@ async function storeUploadedImage(input) {
         mimeType: input.mimeType,
     });
     return {
-        localPath: storageKey,
+        storageKey,
     };
 }
 async function saveGeneratedImage(input) {
@@ -168,10 +167,10 @@ async function saveGeneratedImage(input) {
     if (isLocalStorage()) {
         const uploadsDir = storage_1.storagePaths.generatedImageRoot;
         await fs_1.default.promises.mkdir(uploadsDir, { recursive: true });
-        const localPath = path_1.default.join(uploadsDir, fileName);
-        await fs_1.default.promises.writeFile(localPath, input.buffer);
+        const storageKey = path_1.default.join(uploadsDir, fileName);
+        await fs_1.default.promises.writeFile(storageKey, input.buffer);
         return {
-            localPath,
+            storageKey,
         };
     }
     const storageKey = createStorageKey('generated', fileName);
@@ -181,27 +180,27 @@ async function saveGeneratedImage(input) {
         mimeType: `image/${input.extension === 'jpg' ? 'jpeg' : input.extension}`,
     });
     return {
-        localPath: storageKey,
+        storageKey,
     };
 }
-async function readImageBuffer(localPath) {
+async function readImageBuffer(storageKey) {
     if (isLocalStorage()) {
-        const absolutePath = resolveLocalPath(localPath);
+        const absolutePath = resolveStorageReference(storageKey);
         if (!fs_1.default.existsSync(absolutePath)) {
             throw new Error('Local image file not found');
         }
         return fs_1.default.promises.readFile(absolutePath);
     }
-    return readBufferFromS3(localPath);
+    return readBufferFromS3(storageKey);
 }
-async function deleteImage(localPath) {
+async function deleteImage(storageKey) {
     if (isLocalStorage()) {
-        const absolutePath = resolveLocalPath(localPath);
+        const absolutePath = resolveStorageReference(storageKey);
         if (!fs_1.default.existsSync(absolutePath)) {
             return;
         }
         await fs_1.default.promises.unlink(absolutePath);
         return;
     }
-    await deleteFromS3(localPath);
+    await deleteFromS3(storageKey);
 }

@@ -262,7 +262,7 @@ model DraftImage {
   id             Int             @id @default(autoincrement())
   draftId        Int
   sourceType     ImageSourceType
-  localPath      String?
+  storageKey     String?
   remoteUrl      String?
   wpMediaId      Int?
   altText        String?

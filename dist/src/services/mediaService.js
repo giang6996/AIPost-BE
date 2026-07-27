@@ -50,15 +50,15 @@ function getPreviewUrlForDraftImage(image) {
     if (image.remoteUrl) {
         return image.remoteUrl;
     }
-    if (!image.localPath) {
+    if (!image.storageKey) {
         return null;
     }
-    const normalizedLocalPath = normalizeSlashes(image.localPath);
+    const normalizedStorageKey = normalizeSlashes(image.storageKey);
     const uploadsRoot = normalizeSlashes(path_1.default.resolve(process.cwd(), "uploads"));
-    if (!normalizedLocalPath.startsWith(uploadsRoot)) {
+    if (!normalizedStorageKey.startsWith(uploadsRoot)) {
         return null;
     }
-    const relativePath = normalizedLocalPath
+    const relativePath = normalizedStorageKey
         .slice(uploadsRoot.length)
         .replace(/^\/+/, "");
     return `${getPublicBackendBaseUrl()}/uploads/${relativePath}`;
@@ -110,7 +110,7 @@ async function createDraftImage(input) {
         data: {
             draftId: input.draftId,
             sourceType: input.sourceType,
-            localPath: input.localPath ?? null,
+            storageKey: input.storageKey ?? null,
             altText: input.altText?.trim() || null,
             caption: input.caption?.trim() || null,
             positionMarker: input.positionMarker?.trim() || null,
@@ -144,7 +144,7 @@ async function saveGeneratedDraftImage(input) {
     if (!fileBuffer || fileBuffer.length === 0) {
         throw new Error("Invalid base64 image data");
     }
-    const { localPath } = await (0, mediaStorageService_1.saveGeneratedImage)({
+    const { storageKey } = await (0, mediaStorageService_1.saveGeneratedImage)({
         draftId: draft.id,
         buffer: fileBuffer,
         extension,
@@ -153,7 +153,7 @@ async function saveGeneratedDraftImage(input) {
         data: {
             draftId: draft.id,
             sourceType: client_1.ImageSourceType.GENERATED,
-            localPath,
+            storageKey,
             altText: input.altText ?? null,
             caption: input.caption ?? null,
             positionMarker: input.positionMarker ?? null,
@@ -190,8 +190,8 @@ async function uploadDraftImageToWp(input) {
     if (!image) {
         throw new Error("Draft image not found");
     }
-    if (!image.localPath) {
-        throw new Error("Draft image local file path is missing");
+    if (!image.storageKey) {
+        throw new Error("Draft image storage key is missing");
     }
     const resolvedSiteId = input.siteId ?? draft.defaultSiteId;
     if (!resolvedSiteId) {
@@ -206,8 +206,8 @@ async function uploadDraftImageToWp(input) {
     if (!site) {
         throw new Error("Target site not found");
     }
-    const fileBuffer = await (0, mediaStorageService_1.readImageBuffer)(image.localPath);
-    const filename = path_1.default.basename(image.localPath);
+    const fileBuffer = await (0, mediaStorageService_1.readImageBuffer)(image.storageKey);
+    const filename = path_1.default.basename(image.storageKey);
     const ext = path_1.default.extname(filename).toLowerCase();
     let mimeType = "application/octet-stream";
     if (ext === ".jpg" || ext === ".jpeg")
@@ -424,9 +424,9 @@ async function deleteDraftImage(input) {
             },
         });
     }
-    if (image.localPath) {
+    if (image.storageKey) {
         try {
-            await (0, mediaStorageService_1.deleteImage)(image.localPath);
+            await (0, mediaStorageService_1.deleteImage)(image.storageKey);
         }
         catch {
             // ignore local file delete errors

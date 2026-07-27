@@ -22,7 +22,7 @@ export type CreateDraftImageInput = {
   draftId: number;
   userId: number;
   sourceType: ImageSourceType;
-  localPath?: string | null;
+  storageKey?: string | null;
   altText?: string | null;
   caption?: string | null;
   positionMarker?: string | null;
@@ -99,7 +99,7 @@ function normalizeSlashes(value: string) {
 }
 
 function mapDraftImageWithPreviewUrl<
-  T extends { remoteUrl?: string | null; localPath?: string | null },
+  T extends { remoteUrl?: string | null; storageKey?: string | null },
 >(image: T) {
   return {
     ...image,
@@ -109,24 +109,24 @@ function mapDraftImageWithPreviewUrl<
 
 function getPreviewUrlForDraftImage(image: {
   remoteUrl?: string | null;
-  localPath?: string | null;
+  storageKey?: string | null;
 }) {
   if (image.remoteUrl) {
     return image.remoteUrl;
   }
 
-  if (!image.localPath) {
+  if (!image.storageKey) {
     return null;
   }
 
-  const normalizedLocalPath = normalizeSlashes(image.localPath);
+  const normalizedStorageKey = normalizeSlashes(image.storageKey);
   const uploadsRoot = normalizeSlashes(path.resolve(process.cwd(), "uploads"));
 
-  if (!normalizedLocalPath.startsWith(uploadsRoot)) {
+  if (!normalizedStorageKey.startsWith(uploadsRoot)) {
     return null;
   }
 
-  const relativePath = normalizedLocalPath
+  const relativePath = normalizedStorageKey
     .slice(uploadsRoot.length)
     .replace(/^\/+/, "");
 
@@ -189,7 +189,7 @@ export async function createDraftImage(input: CreateDraftImageInput) {
     data: {
       draftId: input.draftId,
       sourceType: input.sourceType,
-      localPath: input.localPath ?? null,
+      storageKey: input.storageKey ?? null,
       altText: input.altText?.trim() || null,
       caption: input.caption?.trim() || null,
       positionMarker: input.positionMarker?.trim() || null,
@@ -235,7 +235,7 @@ export async function saveGeneratedDraftImage(
     throw new Error("Invalid base64 image data");
   }
 
-  const { localPath } = await saveGeneratedImage({
+  const { storageKey } = await saveGeneratedImage({
     draftId: draft.id,
     buffer: fileBuffer,
     extension,
@@ -245,7 +245,7 @@ export async function saveGeneratedDraftImage(
     data: {
       draftId: draft.id,
       sourceType: ImageSourceType.GENERATED,
-      localPath,
+      storageKey,
       altText: input.altText ?? null,
       caption: input.caption ?? null,
       positionMarker: input.positionMarker ?? null,
@@ -288,8 +288,8 @@ export async function uploadDraftImageToWp(input: UploadDraftImageToWpInput) {
     throw new Error("Draft image not found");
   }
 
-  if (!image.localPath) {
-    throw new Error("Draft image local file path is missing");
+  if (!image.storageKey) {
+    throw new Error("Draft image storage key is missing");
   }
 
   const resolvedSiteId = input.siteId ?? draft.defaultSiteId;
@@ -309,8 +309,8 @@ export async function uploadDraftImageToWp(input: UploadDraftImageToWpInput) {
     throw new Error("Target site not found");
   }
 
-  const fileBuffer = await readImageBuffer(image.localPath);
-  const filename = path.basename(image.localPath);
+  const fileBuffer = await readImageBuffer(image.storageKey);
+  const filename = path.basename(image.storageKey);
   const ext = path.extname(filename).toLowerCase();
 
   let mimeType = "application/octet-stream";
@@ -584,9 +584,9 @@ export async function deleteDraftImage(input: DeleteDraftImageInput) {
     })
   }
 
-  if (image.localPath) {
+  if (image.storageKey) {
     try {
-      await deleteImage(image.localPath)
+      await deleteImage(image.storageKey)
     } catch {
       // ignore local file delete errors
     }

@@ -88,7 +88,7 @@ export async function uploadDraftImageHandler(req: Request, res: Response) {
     const { altText, caption, positionMarker } = req.body
 
     const storedImage = await storeUploadedImage({
-      localPath: req.file.path,
+      storageKey: req.file.path,
       buffer: req.file.buffer,
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
@@ -98,7 +98,7 @@ export async function uploadDraftImageHandler(req: Request, res: Response) {
       draftId,
       userId: userId,
       sourceType: ImageSourceType.UPLOADED,
-      localPath: storedImage.localPath,
+      storageKey: storedImage.storageKey,
       altText,
       caption,
       positionMarker,

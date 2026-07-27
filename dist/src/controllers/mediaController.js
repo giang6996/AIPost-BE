@@ -53,7 +53,7 @@ async function uploadDraftImageHandler(req, res) {
         }
         const { altText, caption, positionMarker } = req.body;
         const storedImage = await (0, mediaStorageService_1.storeUploadedImage)({
-            localPath: req.file.path,
+            storageKey: req.file.path,
             buffer: req.file.buffer,
             originalName: req.file.originalname,
             mimeType: req.file.mimetype,
@@ -62,7 +62,7 @@ async function uploadDraftImageHandler(req, res) {
             draftId,
             userId: userId,
             sourceType: client_1.ImageSourceType.UPLOADED,
-            localPath: storedImage.localPath,
+            storageKey: storedImage.storageKey,
             altText,
             caption,
             positionMarker,

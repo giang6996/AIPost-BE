@@ -180,9 +180,9 @@ export async function deleteDraft(draftId: number, userId: number) {
     throw new Error('Draft not found')
   }
 
-  const localPaths = draft.images
-    .map((image) => image.localPath)
-    .filter((localPath): localPath is string => typeof localPath === 'string')
+  const storageKeys = draft.images
+    .map((image) => image.storageKey)
+    .filter((storageKey): storageKey is string => typeof storageKey === 'string')
 
   await prisma.draft.delete({
     where: {
@@ -190,11 +190,11 @@ export async function deleteDraft(draftId: number, userId: number) {
     },
   })
 
-  if (localPaths.length > 0) {
+  if (storageKeys.length > 0) {
     await Promise.all(
-      localPaths.map(async (localPath) => {
+      storageKeys.map(async (storageKey) => {
         try {
-          const absolutePath = path.resolve(localPath)
+          const absolutePath = path.resolve(storageKey)
           if (fs.existsSync(absolutePath)) {
             await fs.promises.unlink(absolutePath)
           }
