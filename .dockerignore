@@ -1,0 +1,10 @@
+node_modules
+dist
+uploads
+app_data
+.git
+.agents
+.env
+.env.test
+README.md
+*.log

@@ -111,6 +111,16 @@ Production release flow:
 
 This keeps schema changes separate from the application process and makes the runtime behavior predictable for EC2, containers, and Kubernetes later.
 
+## Container Scaffold
+
+- `Dockerfile` builds the app in three stages: install dependencies, compile the source, then run only the compiled production artifact.
+- The runtime container starts with `node dist/src/server.js`, which matches the production start script.
+- The image is intentionally stateless. Media should use S3 in production rather than relying on container-local files.
+- The app bootstrap still loads SSM secrets at startup, so the container should receive AWS runtime access and the required environment variables from the deployment platform.
+- Database migrations should still run as a separate deployment step before traffic is shifted to the new container version.
+
+Because of that split, the container image is meant to be portable across EC2, ECS, and Kubernetes without baking secrets or migration logic into the image itself.
+
 ## API Overview
 
 - `GET /health` - health check
