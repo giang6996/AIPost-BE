@@ -8,3 +8,5 @@ app_data
 .env.test
 README.md
 *.log
+.vscode
+.agents
