@@ -74,6 +74,9 @@ The server listens on `http://localhost:3001` by default.
 - `DATABASE_URL` - required PostgreSQL connection string
 - `ENCRYPTION_KEY` - required secret used for encrypted credentials and API config storage
 - `CORS_ORIGINS` - comma-separated frontend origin allowlist, such as `http://localhost:5173` for local dev or `https://app.yourdomain.com` for production
+- `MEDIA_STORAGE_PROVIDER` - `local` for filesystem storage or `s3` for object storage; defaults to `local`
+- `MEDIA_PUBLIC_BASE_URL` - optional public media base URL for S3 or CDN-backed deployments
+- `S3_BUCKET_NAME` - required when `MEDIA_STORAGE_PROVIDER=s3`
 - `AWS_REGION` - required in production when loading secrets from SSM
 - `SSM_PARAMETER_PREFIX` or `SSM_PARAMETER_PATH` - required in production; points to a parameter path such as `/aipost/prod`
 
@@ -83,6 +86,8 @@ Production secret loading process:
 - Use a path such as `/aipost/prod/DATABASE_URL` and `/aipost/prod/ENCRYPTION_KEY`
 - Set `AWS_REGION` and `SSM_PARAMETER_PREFIX` in the production runtime environment
 - Set `CORS_ORIGINS` to the production frontend domain(s) so browser requests are allowed
+- Set `MEDIA_STORAGE_PROVIDER=s3` and `S3_BUCKET_NAME` for cloud media storage
+- Set `MEDIA_PUBLIC_BASE_URL` if you want previews to point at a CDN or custom public bucket URL
 - Keep local `.env` and test `.env.test` values separate from production values
 
 The backend reads local env files during development, but production should inject secrets from AWS instead of relying on checked-in files or hardcoded defaults.
@@ -112,10 +117,64 @@ The backend reads local env files during development, but production should inje
 
 ## Storage
 
-- Uploaded files are stored under `uploads/`
-- Generated images are stored under `uploads/generated/`
-- Uploaded images are stored under `uploads/uploaded/`
-- These directories are created automatically on server start and during tests
+- The backend uses one neutral field, `storageKey`, for draft images.
+- In local mode, `storageKey` points to a file under `uploads/`.
+- In S3 mode, `storageKey` becomes an S3 object key instead of a disk path.
+- The storage adapter hides the difference so the rest of the app can use the same flow in local and cloud deployments.
+- Local development stores files under `uploads/`, with generated images under `uploads/generated/` and uploaded images under `uploads/uploaded/`.
+- These directories are created automatically on server start and during tests.
+
+## Media Flow
+
+The media system is now designed so the same workflow works in local filesystem mode and in S3 mode.
+
+### 1. Upload or generate an image
+
+- A user uploads an image through the draft image endpoints, or the AI image generator creates one.
+- The request first passes through the upload middleware.
+- In local mode, Multer writes the file to disk.
+- In S3 mode, Multer keeps the file in memory so the storage adapter can send the bytes to S3.
+- The storage adapter returns one `storageKey`, and the backend saves that value in `DraftImage.storageKey`.
+
+### 2. List and preview images
+
+- When the API returns draft images, it also returns a `previewUrl`.
+- If the image is local, the preview URL points to `/uploads/...` on the backend.
+- If the image is stored in S3, the preview URL points to the public media base URL or S3 bucket URL.
+- This is why the frontend can render previews without caring where the file is physically stored.
+
+### 3. Update or delete image metadata
+
+- Title, caption, alt text, and position changes are saved in the database only.
+- If an image is deleted, the backend deletes the file or S3 object through the storage adapter first, then removes the DB row.
+- This keeps cleanup behavior consistent across local and cloud storage.
+
+### 4. Upload the image into WordPress
+
+- Before an image can be inserted into a WordPress post, the backend uploads that image to WordPress media.
+- The backend reads the image bytes through the storage adapter.
+- In local mode, that means reading from disk.
+- In S3 mode, that means downloading the object from S3.
+- After WordPress accepts the file, the backend stores the returned `remoteUrl` and `wpMediaId` on the draft image record.
+
+### 5. Insert the image into draft content
+
+- Once a draft image has a WordPress `remoteUrl`, the backend can build the HTML image block.
+- Insert operations place that HTML into the draft content at the selected position.
+- The draft now contains WordPress-ready image markup, while the original file still remains managed by the storage layer.
+
+### 6. Publish the draft
+
+- Publishing sends the draft HTML, categories, tags, SEO data, and featured image reference to WordPress.
+- The publish step does not depend on permanent files inside the container or EC2 instance.
+- If the draft has a featured image, the backend passes the stored WordPress media ID to WordPress during publish.
+- This is why the media flow works for both local dev and cloud production without changing the publish endpoint.
+
+### Local vs S3 summary
+
+- Local mode keeps the old filesystem workflow for development and testing.
+- S3 mode moves the same workflow to object storage without changing the draft image API shape.
+- The main difference is where the bytes live, not how the rest of the app talks about them.
 
 ## Testing
 
