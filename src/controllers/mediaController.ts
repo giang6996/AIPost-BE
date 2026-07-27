@@ -89,6 +89,9 @@ export async function uploadDraftImageHandler(req: Request, res: Response) {
 
     const storedImage = await storeUploadedImage({
       localPath: req.file.path,
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
     })
 
     const image = await createDraftImage({

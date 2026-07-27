@@ -1,23 +1,31 @@
 import fs from 'fs'
 import multer from 'multer'
 import { getUploadedImageRoot } from '../services/mediaStorageService'
+import { env } from '../config/env'
 
 const uploadedImageRoot = getUploadedImageRoot()
 
-if (!fs.existsSync(uploadedImageRoot)) {
+const storage =
+  env.mediaStorageProvider === 's3'
+    ? multer.memoryStorage()
+    : multer.diskStorage({
+        destination: (_req, _file, cb) => {
+          if (!fs.existsSync(uploadedImageRoot)) {
+            fs.mkdirSync(uploadedImageRoot, { recursive: true })
+          }
+
+          cb(null, uploadedImageRoot)
+        },
+        filename: (_req, file, cb) => {
+          const timestamp = Date.now()
+          const safeOriginalName = file.originalname.replace(/\s+/g, '_')
+          cb(null, `${timestamp}-${safeOriginalName}`)
+        },
+      })
+
+if (env.mediaStorageProvider === 'local' && !fs.existsSync(uploadedImageRoot)) {
   fs.mkdirSync(uploadedImageRoot, { recursive: true })
 }
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadedImageRoot)
-  },
-  filename: (_req, file, cb) => {
-    const timestamp = Date.now()
-    const safeOriginalName = file.originalname.replace(/\s+/g, '_')
-    cb(null, `${timestamp}-${safeOriginalName}`)
-  },
-})
 
 function fileFilter(
   _req: Express.Request,

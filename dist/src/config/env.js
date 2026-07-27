@@ -20,10 +20,22 @@ function parseCsv(value) {
         .map((entry) => entry.trim())
         .filter(Boolean);
 }
+function parseMediaStorageProvider(value) {
+    if (!value || value === 'local') {
+        return 'local';
+    }
+    if (value === 's3') {
+        return 's3';
+    }
+    throw new Error("Missing or invalid environment variable: MEDIA_STORAGE_PROVIDER must be 'local' or 's3'");
+}
 exports.env = {
     port: Number(process.env.PORT ?? 3001),
     nodeEnv: process.env.NODE_ENV ?? 'development',
     databaseUrl: requireEnv('DATABASE_URL'),
     encryptionKey: requireEnv('ENCRYPTION_KEY'),
     corsOrigins: parseCsv(requireEnv('CORS_ORIGINS')),
+    mediaStorageProvider: parseMediaStorageProvider(process.env.MEDIA_STORAGE_PROVIDER),
+    mediaPublicBaseUrl: process.env.MEDIA_PUBLIC_BASE_URL ?? null,
+    s3BucketName: process.env.S3_BUCKET_NAME ?? null,
 };

@@ -1,40 +1,147 @@
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
 import fs from 'fs'
 import path from 'path'
 import { randomBytes } from 'crypto'
+import { env } from '../config/env'
 import { storagePaths } from '../config/storage'
 
 function normalizeSlashes(value: string) {
   return value.replace(/\\/g, '/')
 }
 
-function normalizeUploadPath(value: string) {
-  // Storage files should be addressed in a platform-neutral way so Windows and Linux
-  // produce the same URL and cleanup behavior.
-  return normalizeSlashes(value)
+function normalizeStorageReference(value: string) {
+  // Storage references must behave the same on Windows and Linux.
+  // This keeps local paths and S3 object keys comparable in logs and URLs.
+  return normalizeSlashes(value).replace(/^\/+/, '')
 }
 
-function resolveUploadsRelativePath(localPath: string) {
-  const normalizedLocalPath = normalizeUploadPath(localPath)
-  const uploadsRoot = normalizeUploadPath(path.resolve(process.cwd(), 'uploads'))
+function getUploadsRoot() {
+  return normalizeSlashes(path.resolve(process.cwd(), 'uploads'))
+}
 
-  if (!normalizedLocalPath.startsWith(uploadsRoot)) {
-    return null
+function resolveLocalPath(localPath: string) {
+  return path.resolve(localPath)
+}
+
+function isLocalStorage() {
+  return env.mediaStorageProvider === 'local'
+}
+
+function requireS3BucketName() {
+  if (!env.s3BucketName) {
+    throw new Error('Missing required environment variable: S3_BUCKET_NAME')
   }
 
-  return normalizedLocalPath
-    .slice(uploadsRoot.length)
-    .replace(/^\/+/, '')
+  return env.s3BucketName
+}
+
+function requireS3Region() {
+  const region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION
+
+  if (!region) {
+    throw new Error('Missing required environment variable: AWS_REGION')
+  }
+
+  return region
+}
+
+function getS3Client() {
+  return new S3Client({
+    region: requireS3Region(),
+  })
 }
 
 function getPublicBackendBaseUrl() {
-  // Local previews still point at the backend itself. Later, this can become a CDN
-  // or S3 bucket URL without changing the services that call this module.
-  return process.env.PUBLIC_BACKEND_URL || 'http://localhost:3001'
+  // Local previews still come from the backend URL.
+  // In S3 mode, this becomes the public bucket/CDN URL that serves object bytes.
+  if (isLocalStorage()) {
+    return process.env.PUBLIC_BACKEND_URL || 'http://localhost:3001'
+  }
+
+  const explicitBaseUrl = env.mediaPublicBaseUrl?.trim().replace(/\/+$/, '')
+  if (explicitBaseUrl) {
+    return explicitBaseUrl
+  }
+
+  const bucket = requireS3BucketName()
+  const region = requireS3Region()
+  return `https://${bucket}.s3.${region}.amazonaws.com`
+}
+
+function createStorageKey(prefix: 'uploaded' | 'generated', fileName: string) {
+  // We keep the key layout simple and readable so operators can inspect it in S3.
+  const safeName = fileName.replace(/\s+/g, '_')
+  return `${prefix}/${Date.now()}-${randomBytes(6).toString('hex')}-${safeName}`
+}
+
+async function uploadBufferToS3(input: {
+  storageKey: string
+  buffer: Buffer
+  mimeType: string
+}) {
+  const client = getS3Client()
+  const bucket = requireS3BucketName()
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: input.storageKey,
+      Body: input.buffer,
+      ContentType: input.mimeType,
+    }),
+  )
+}
+
+async function readBufferFromS3(storageKey: string) {
+  const client = getS3Client()
+  const bucket = requireS3BucketName()
+
+  const response = await client.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: normalizeStorageReference(storageKey),
+    }),
+  )
+
+  if (!response.Body) {
+    throw new Error('Remote image file not found')
+  }
+
+  const body = response.Body as {
+    transformToByteArray?: () => Promise<Uint8Array>
+  }
+
+  if (typeof body.transformToByteArray === 'function') {
+    return Buffer.from(await body.transformToByteArray())
+  }
+
+  throw new Error('Unable to read remote image buffer')
+}
+
+async function deleteFromS3(storageKey: string) {
+  const client = getS3Client()
+  const bucket = requireS3BucketName()
+
+  await client.send(
+    new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: normalizeStorageReference(storageKey),
+    }),
+  )
 }
 
 export function ensureMediaStorageDirectories() {
-  // The storage layer owns the folder layout, not the controllers.
-  // Keeping it here makes a future S3 swap much smaller.
+  // Only local development and tests need on-disk folders.
+  // S3 mode intentionally does nothing here so production does not depend on EC2 disk state.
+  if (!isLocalStorage()) {
+    return
+  }
+
   const dirs = [storagePaths.uploadedImageRoot, storagePaths.generatedImageRoot]
 
   for (const dir of dirs) {
@@ -53,19 +160,55 @@ export function getImagePreviewUrl(localPath?: string | null) {
     return null
   }
 
-  const relativePath = resolveUploadsRelativePath(localPath)
-  if (!relativePath) {
-    return null
+  if (isLocalStorage()) {
+    const normalizedLocalPath = normalizeSlashes(resolveLocalPath(localPath))
+    const uploadsRoot = getUploadsRoot()
+
+    if (!normalizedLocalPath.startsWith(uploadsRoot)) {
+      return null
+    }
+
+    const relativePath = normalizedLocalPath
+      .slice(uploadsRoot.length)
+      .replace(/^\/+/, '')
+
+    return `${getPublicBackendBaseUrl()}/uploads/${relativePath}`
   }
 
-  return `${getPublicBackendBaseUrl()}/uploads/${relativePath}`
+  return `${getPublicBackendBaseUrl()}/${normalizeStorageReference(localPath)}`
 }
 
-export async function storeUploadedImage(input: { localPath: string }) {
-  // Today uploads already land on disk, so this adapter mainly normalizes the path.
-  // Later this function can upload to S3 and return a provider-neutral storage key.
+export async function storeUploadedImage(input: {
+  localPath?: string
+  buffer?: Buffer
+  originalName: string
+  mimeType: string
+}) {
+  // The DB still stores the old `localPath` field name.
+  // In S3 mode, that field becomes an opaque storage reference instead of a disk path.
+  if (isLocalStorage()) {
+    if (!input.localPath) {
+      throw new Error('Local image path is required for local storage')
+    }
+
+    return {
+      localPath: path.normalize(input.localPath),
+    }
+  }
+
+  if (!input.buffer) {
+    throw new Error('Image buffer is required for S3 storage')
+  }
+
+  const storageKey = createStorageKey('uploaded', input.originalName)
+  await uploadBufferToS3({
+    storageKey,
+    buffer: input.buffer,
+    mimeType: input.mimeType,
+  })
+
   return {
-    localPath: path.normalize(input.localPath),
+    localPath: storageKey,
   }
 }
 
@@ -74,39 +217,61 @@ export async function saveGeneratedImage(input: {
   buffer: Buffer
   extension: string
 }) {
-  // Generated images are written through the storage layer so their destination is
-  // controlled from one place instead of being spread across services.
-  const uploadsDir = storagePaths.generatedImageRoot
-  await fs.promises.mkdir(uploadsDir, { recursive: true })
-
+  // Generated images follow the same provider switch as uploaded images.
+  // That keeps the rest of the app unaware of whether the bytes ended up on disk or in S3.
   const fileName = `draft-${input.draftId}-${Date.now()}-${randomBytes(6).toString(
     'hex',
   )}.${input.extension}`
-  const localPath = path.join(uploadsDir, fileName)
 
-  await fs.promises.writeFile(localPath, input.buffer)
+  if (isLocalStorage()) {
+    const uploadsDir = storagePaths.generatedImageRoot
+    await fs.promises.mkdir(uploadsDir, { recursive: true })
+
+    const localPath = path.join(uploadsDir, fileName)
+    await fs.promises.writeFile(localPath, input.buffer)
+
+    return {
+      localPath,
+    }
+  }
+
+  const storageKey = createStorageKey('generated', fileName)
+  await uploadBufferToS3({
+    storageKey,
+    buffer: input.buffer,
+    mimeType: `image/${input.extension === 'jpg' ? 'jpeg' : input.extension}`,
+  })
 
   return {
-    localPath,
+    localPath: storageKey,
   }
 }
 
 export async function readImageBuffer(localPath: string) {
-  const absolutePath = path.resolve(localPath)
+  if (isLocalStorage()) {
+    const absolutePath = resolveLocalPath(localPath)
 
-  if (!fs.existsSync(absolutePath)) {
-    throw new Error('Local image file not found')
+    if (!fs.existsSync(absolutePath)) {
+      throw new Error('Local image file not found')
+    }
+
+    return fs.promises.readFile(absolutePath)
   }
 
-  return fs.promises.readFile(absolutePath)
+  return readBufferFromS3(localPath)
 }
 
 export async function deleteImage(localPath: string) {
-  const absolutePath = path.resolve(localPath)
+  if (isLocalStorage()) {
+    const absolutePath = resolveLocalPath(localPath)
 
-  if (!fs.existsSync(absolutePath)) {
+    if (!fs.existsSync(absolutePath)) {
+      return
+    }
+
+    await fs.promises.unlink(absolutePath)
     return
   }
 
-  await fs.promises.unlink(absolutePath)
+  await deleteFromS3(localPath)
 }
