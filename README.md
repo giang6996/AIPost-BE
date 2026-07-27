@@ -95,9 +95,21 @@ The backend reads local env files during development, but production should inje
 ## Scripts
 
 - `npm run dev` - start the API in development mode with live reload
+- `npm run build` - generate Prisma Client and compile TypeScript into `dist/`
+- `npm start` - run the compiled production server from `dist/src/server.js`
+- `npm run migrate:deploy` - apply Prisma migrations in production or during deployment
 - `npm test` - run the test suite once
 - `npm run test:watch` - run tests in watch mode
 - `npm run test:coverage` - run tests with coverage output
+
+Production release flow:
+
+1. Run `npm ci` on the deployment target or in the build image.
+2. Run `npm run build` to generate the production artifact.
+3. Run `npm run migrate:deploy` before sending traffic to the new version.
+4. Run `npm start` to launch the compiled server.
+
+This keeps schema changes separate from the application process and makes the runtime behavior predictable for EC2, containers, and Kubernetes later.
 
 ## API Overview
 
