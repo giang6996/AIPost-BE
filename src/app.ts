@@ -7,6 +7,7 @@ import aiRoutes from './routes/aiRoute'
 import authRoutes from './routes/authRoute'
 import adminRoutes from './routes/adminRoute'
 import { env } from './config/env.js'
+import { checkDatabaseHealth } from './utils/dbHealthCheck'
 
 const app = express()
 const cors = require('cors')
@@ -31,6 +32,30 @@ app.get('/health', (_req, res) => {
     success: true,
     message: 'Server is running',
   })
+})
+
+app.get('/health/ready', async (_req, res) => {
+  try {
+    const checks = await checkDatabaseHealth()
+
+    // Readiness should only pass when the app can actually reach PostgreSQL.
+    res.status(200).json({
+      success: true,
+      ready: true,
+      checks,
+    })
+  } catch {
+    // Keep the failure response generic so probes can see the state without
+    // exposing connection details or other internal runtime information.
+    res.status(503).json({
+      success: false,
+      ready: false,
+      checks: {
+        database: 'down',
+      },
+      message: 'Database readiness check failed',
+    })
+  }
 })
 
 app.use('/admin', adminRoutes)
