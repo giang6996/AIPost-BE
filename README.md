@@ -130,6 +130,9 @@ docker run --rm -p 3001:3001 --env-file .env aipost-backend
 
 To use different port on the host, change the left side of `-p` and keep the container side mapped to `3001`.
 
+*Notice: During the Docker build, Prisma may validates `DATABASE_URL` while generating the client.  A safe
+placeholder for that step has been implemented so the image can compile without exposing the real production database secret. **The actual runtime `DATABASE_URL` still come from SSM or the deployment environment**.*
+
 
 ## API Overview
 

@@ -1,6 +1,40 @@
 import type { Express } from 'express'
 import { ensureMediaStorageDirectories } from './services/mediaStorageService.js'
 
+type AppModule = {
+  default?: Express | { default?: Express }
+}
+
+function isExpressApp(value: unknown): value is Express {
+  return (
+    (typeof value === 'function' || typeof value === 'object') &&
+    value !== null &&
+    'listen' in value
+  )
+}
+
+function unwrapExpressApp(moduleExport: AppModule): Express {
+  // In NodeNext/CommonJS builds, dynamic import() can wrap the CommonJS export
+  // inside one or two `default` properties. Normalize that shape here so the
+  // bootstrap always gets the real Express app instance before calling listen().
+  const candidate = moduleExport.default
+
+  if (isExpressApp(candidate)) {
+    return candidate as Express
+  }
+
+  if (
+    candidate &&
+    (typeof candidate === 'function' || typeof candidate === 'object') &&
+    'default' in candidate &&
+    isExpressApp(candidate.default)
+  ) {
+    return candidate.default as Express
+  }
+
+  throw new Error('App module did not export a valid Express instance')
+}
+
 async function bootstrap() {
   // The app still boots locally from .env files, but production should resolve secrets from AWS first.
   if (process.env.NODE_ENV === 'production') {
@@ -20,7 +54,7 @@ async function bootstrap() {
   }
 
   // Import the app only after env secrets are present, because app.ts and env.ts validate config at load time.
-  const app = (await import('./app.js')).default as unknown as Express
+  const app = unwrapExpressApp((await import('./app.js')) as AppModule)
   const { env } = await import('./config/env.js')
 
   // Storage setup belongs to the storage adapter so the boot path stays agnostic to disk vs cloud.
