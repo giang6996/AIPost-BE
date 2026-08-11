@@ -37,11 +37,6 @@ pipeline {
                     npx prisma migrate deploy
                     npx prisma migrate status
 
-                    docker exec aipost-test-db \
-                        psql \
-                        -U aipost_test \
-                        -d aipost_test \
-                        -c '\\d "UserSession"'
                 '''
             }
         }
