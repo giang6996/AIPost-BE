@@ -15,6 +15,10 @@ pipeline {
         }
 
         stage('Generate Prisma Client') {
+            environment {
+                DATABASE_URL = 'postgresql://ci_user:ci_password@localhost:5432/aipost_test'
+            }
+
             steps {
                 sh 'npx prisma generate'
             }
