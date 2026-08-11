@@ -14,6 +14,12 @@ pipeline {
             }
         }
 
+        stage('Generate Prisma Client') {
+            steps {
+                sh 'npx prisma generate'
+            }
+        }
+
         stage('Test') {
             steps {
                 sh 'npm test'
