@@ -4,6 +4,9 @@ pipeline {
     environment {
         AWS_REGION = "ap-southeast-1"
 
+        IMAGE_TAG_PARAMETER = '/aipost/ec2/backend/IMAGE_TAG'
+        BACKEND_ASG_NAME = 'aipost-ec2-backend-asg'
+
         ECR_REGISTRY = "596261186564.dkr.ecr.ap-southeast-1.amazonaws.com"
         ECR_REPOSITORY = "aipost-ec2-backend"
 
@@ -131,11 +134,103 @@ pipeline {
             }
         }
 
+        stage('Publish Release Version') {
+            steps {
+                sh '''
+                    aws ssm put-parameter \
+                    --name "${IMAGE_TAG_PARAMETER}" \
+                    --type String \
+                    --value "${IMAGE_TAG}" \
+                    --overwrite \
+                    --region "${AWS_REGION}"
+                '''
+            }
+        }
+
         stage('Cleanup Local Docker Image') {
             steps {
                 sh '''
                     docker image rm ${IMAGE_URI} || true
                     docker image rm ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest || true
+                '''
+            }
+        }
+
+// Adjust Min Healthy Percentage to 50 or 80 during prod
+        stage('Deploy to EC2 ASG') {
+            steps {
+                script {
+                    env.INSTANCE_REFRESH_ID = sh(
+                        script: '''
+                            aws autoscaling start-instance-refresh \
+                            --auto-scaling-group-name "${BACKEND_ASG_NAME}" \
+                            --region "${AWS_REGION}" \
+                            --preferences '{
+                                "MinHealthyPercentage": 0, 
+                                "InstanceWarmup": 120
+                            }' \
+                            --query 'InstanceRefreshId' \
+                            --output text
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Instance Refresh ID: ${env.INSTANCE_REFRESH_ID}"
+                }
+            }
+        }
+
+// Polling stage to track deployment progress, does not add anything
+        stage('Wait for ASG Deployment') {
+            steps {
+                sh '''
+                    set -e
+
+                    while true; do
+                    STATUS=$(aws autoscaling describe-instance-refreshes \
+                        --auto-scaling-group-name "${BACKEND_ASG_NAME}" \
+                        --instance-refresh-ids "${INSTANCE_REFRESH_ID}" \
+                        --region "${AWS_REGION}" \
+                        --query 'InstanceRefreshes[0].Status' \
+                        --output text)
+
+                    echo "Instance Refresh status: ${STATUS}"
+
+                    case "${STATUS}" in
+                        Successful)
+                        exit 0
+                        ;;
+
+                        Failed|Cancelled|RollbackFailed|RollbackSuccessful)
+                        echo "Deployment failed with status: ${STATUS}"
+                        exit 1
+                        ;;
+
+                        *)
+                        sleep 15
+                        ;;
+                    esac
+                    done
+                '''
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                sh '''
+                    set -e
+
+                    echo "Checking liveness..."
+                    curl --fail \
+                    --retry 10 \
+                    --retry-delay 10 \
+                    https://api.jeblearning.pro.vn/health
+
+                    echo "Checking readiness..."
+                    curl --fail \
+                    --retry 10 \
+                    --retry-delay 10 \
+                    https://api.jeblearning.pro.vn/health/ready
                 '''
             }
         }
