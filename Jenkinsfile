@@ -14,9 +14,25 @@ pipeline {
             }
         }
 
+        stage('Start Test Database') {
+            steps {
+                sh '''
+                    docker rm -f aipost-test-db || true
+
+                    docker run -d \
+                      --name aipost-test-db \
+                      -e POSTGRES_USER=aipost_test \
+                      -e POSTGRES_PASSWORD=aipost_test_password \
+                      -e POSTGRES_DB=aipost_test \
+                      -p 5433:5432 \
+                      postgres:16
+                '''
+            }
+        }
+
         stage('Generate Prisma Client') {
             environment {
-                DATABASE_URL = 'postgresql://ci_user:ci_password@localhost:5432/aipost_test'
+                DATABASE_URL = 'postgresql://aipost_test:aipost_test_password@127.0.0.1:5433/aipost_test'
             }
 
             steps {
@@ -38,6 +54,10 @@ pipeline {
     }
 
     post {
+        always {
+            sh 'docker rm -f aipost-test-db || true'
+        }
+
         success {
             echo 'AIPost backend CI succeeded.'
         }
