@@ -2,6 +2,11 @@ pipeline {
     agent any
 
     environment {
+        AWS_REGION = 'ap-southeast-1'
+
+        ECR-REGISTRY = '596261186564.dkr.ecr.ap-southeast-1.amazonaws.com'
+        ECR-REPOSITORY = "aipost-ec2-backend"
+
         DATABASE_URL = 'postgresql://aipost_test:aipost_test_password@127.0.0.1:5433/aipost_test'
         ENCRYPTION_KEY = "123456789012345678901234567890123456789012345678901234567890"
         CORS_ORIGINS="http://localhost:5173"
@@ -69,6 +74,60 @@ pipeline {
         stage('Build') {
             steps {
                 sh 'npm run build'
+            }
+        }
+
+        stage('Prepare Image Metadata') {
+            steps {
+                script {
+                    env.IMAGE_TAG = sh(
+                        script: 'git rev-parse --short=12 HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    env.IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.ECR_REPOSITORY}:${env.IMAGE_TAG}"
+
+                    echo "Docker image tag: ${env.IMAGE_TAG}"
+                    echo "Docker image URI: ${env.IMAGE_URI}"
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    docker build \
+                    -t ${IMAGE_URI} \
+                    .
+                '''
+            }
+        }
+
+        stage('ECR Login') {
+            steps {
+                sh '''
+                    aws ecr get-login-password \
+                    --region ${AWS_REGION} \
+                    | docker login \
+                    --username AWS \
+                    --password-stdin ${ECR_REGISTRY}
+                '''
+            }
+        }
+
+        stage('Push Image to ECR') {
+            steps {
+                sh '''
+                    docker push ${IMAGE_URI}
+
+                    docker tag \
+                        ${IMAGE_URI} \
+                        ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+
+                    docker push \
+                        ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+                '''
             }
         }
     }
