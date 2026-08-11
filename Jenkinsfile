@@ -130,6 +130,15 @@ pipeline {
                 '''
             }
         }
+
+        stage('Cleanup Local Docker Image') {
+            steps {
+                sh '''
+                    docker image rm ${IMAGE_URI} || true
+                    docker image rm ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest || true
+                '''
+            }
+        }
     }
 
     post {
