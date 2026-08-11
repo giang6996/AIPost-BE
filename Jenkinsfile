@@ -33,6 +33,25 @@ pipeline {
                       -e POSTGRES_DB=aipost_test \
                       -p 5433:5432 \
                       postgres:16
+
+                    docker exec aipost-test-db \
+                        psql \
+                        -U aipost_test \
+                        -d aipost_test \
+                        -c '\d "UserSession"'
+                '''
+            }
+        }
+
+        stage('Debug Database') {
+            steps {
+                sh '''
+                    node -e "
+                    const u = new URL(process.env.DATABASE_URL);
+                    console.log('DB host:', u.hostname);
+                    console.log('DB port:', u.port);
+                    console.log('DB name:', u.pathname);
+                    "
                 '''
             }
         }
