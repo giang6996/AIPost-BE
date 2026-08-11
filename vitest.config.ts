@@ -2,6 +2,9 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    exclude: [
+      '**/dist/**'
+    ],
     environment: 'node',
     globals: true,
     setupFiles: ['./src/tests/setup.ts'],
