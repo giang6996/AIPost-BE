@@ -41,7 +41,7 @@ pipeline {
                         psql \
                         -U aipost_test \
                         -d aipost_test \
-                        -c '\d "UserSession"'
+                        -c '\\d "UserSession"'
                 '''
             }
         }
