@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    environment {
+        DATABASE_URL = 'postgresql://aipost_test:aipost_test_password@127.0.0.1:5433/aipost_test'
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -31,10 +35,6 @@ pipeline {
         }
 
         stage('Generate Prisma Client') {
-            environment {
-                DATABASE_URL = 'postgresql://aipost_test:aipost_test_password@127.0.0.1:5433/aipost_test'
-            }
-
             steps {
                 sh 'npx prisma generate'
             }
