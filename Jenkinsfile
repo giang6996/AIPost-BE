@@ -34,6 +34,9 @@ pipeline {
                       -p 5433:5432 \
                       postgres:16
 
+                    npx prisma migrate deploy
+                    npx prisma migrate status
+
                     docker exec aipost-test-db \
                         psql \
                         -U aipost_test \
