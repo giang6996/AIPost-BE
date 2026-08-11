@@ -2,12 +2,12 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'ap-southeast-1'
+        AWS_REGION = "ap-southeast-1"
 
-        ECR-REGISTRY = '596261186564.dkr.ecr.ap-southeast-1.amazonaws.com'
+        ECR-REGISTRY = "596261186564.dkr.ecr.ap-southeast-1.amazonaws.com"
         ECR-REPOSITORY = "aipost-ec2-backend"
 
-        DATABASE_URL = 'postgresql://aipost_test:aipost_test_password@127.0.0.1:5433/aipost_test'
+        DATABASE_URL = "postgresql://aipost_test:aipost_test_password@127.0.0.1:5433/aipost_test"
         ENCRYPTION_KEY = "123456789012345678901234567890123456789012345678901234567890"
         CORS_ORIGINS="http://localhost:5173"
         MEDIA_STORAGE_PROVIDER="local"
