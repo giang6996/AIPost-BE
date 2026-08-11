@@ -3,6 +3,7 @@ pipeline {
 
     environment {
         DATABASE_URL = 'postgresql://aipost_test:aipost_test_password@127.0.0.1:5433/aipost_test'
+        ENCRYPTION_KEY = 123456789012345678901234567890123456789012345678901234567890
     }
 
     stages {
