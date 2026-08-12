@@ -52,7 +52,7 @@ pipeline {
             steps {
                 withEnv([
                     "DATABASE_URL=${TEST_DATABASE_URL}",
-                    "TEST_ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}",
+                    "ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}",
                     "CORS_ORIGINSL=${TEST_CORS_ORIGINS}",
                     "MEDIA_STORAGE_PROVIDER=${TEST_MEDIA_STORAGE_PROVIDER}"
                 ]) {
@@ -65,7 +65,7 @@ pipeline {
             steps {
                 withEnv([
                     "DATABASE_URL=${TEST_DATABASE_URL}"
-                    "TEST_ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}"
+                    "ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}"
                     "CORS_ORIGINSL=${TEST_CORS_ORIGINS}"
                     "MEDIA_STORAGE_PROVIDER=${TEST_MEDIA_STORAGE_PROVIDER}"
                 ]) {
@@ -81,7 +81,7 @@ pipeline {
             steps {
                 withEnv([
                     "DATABASE_URL=${TEST_DATABASE_URL}"
-                    "TEST_ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}"
+                    "ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}"
                     "CORS_ORIGINSL=${TEST_CORS_ORIGINS}"
                     "MEDIA_STORAGE_PROVIDER=${TEST_MEDIA_STORAGE_PROVIDER}"
                 ]) {
