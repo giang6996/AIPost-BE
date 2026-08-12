@@ -93,8 +93,16 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'npm run build'
+                withEnv([
+                    "DATABASE_URL=${TEST_DATABASE_URL}",
+                    "ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}",
+                    "CORS_ORIGINS=${TEST_CORS_ORIGINS}",
+                    "MEDIA_STORAGE_PROVIDER=${TEST_MEDIA_STORAGE_PROVIDER}"
+                ]) {
+                    sh 'npm run build'
+                }
             }
+
         }
 
         stage('Prepare Image Metadata') {
