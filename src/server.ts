@@ -62,6 +62,7 @@ async function bootstrap() {
 
   app.listen(env.port, () => {
     console.log(`Server is running at http://localhost:${env.port}`)
+    console.log(`Hello`)
   })
 }
 
