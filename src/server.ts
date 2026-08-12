@@ -61,7 +61,7 @@ async function bootstrap() {
   ensureMediaStorageDirectories()
 
   app.listen(env.port, () => {
-    console.log(`Server running at http://localhost:${env.port}`)
+    console.log(`Server is running at http://localhost:${env.port}`)
   })
 }
 
