@@ -350,6 +350,12 @@ pipeline {
         }
 
         stage('Verify Deployment') {
+            when {
+                expression {
+                    env.ASG_DESIRED_CAPACITY != '0'
+                }
+            }
+
             options {
                 timeout(time: 5, unit: 'MINUTES')
             }
