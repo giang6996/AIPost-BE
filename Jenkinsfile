@@ -4,16 +4,18 @@ pipeline {
     environment {
         AWS_REGION = "ap-southeast-1"
 
-        IMAGE_TAG_PARAMETER = '/aipost/ec2/backend/IMAGE_TAG'
         BACKEND_ASG_NAME = 'aipost-ec2-backend-asg'
+        IMAGE_TAG_PARAMETER = '/aipost/ec2/backend/IMAGE_TAG'
+        DATABASE_URL_PARAMETER ='/aipost/ec2/backend/DATABASE_URL'
 
         ECR_REGISTRY = "596261186564.dkr.ecr.ap-southeast-1.amazonaws.com"
         ECR_REPOSITORY = "aipost-ec2-backend"
 
-        DATABASE_URL = "postgresql://aipost_test:aipost_test_password@127.0.0.1:5433/aipost_test"
-        ENCRYPTION_KEY = "123456789012345678901234567890123456789012345678901234567890"
-        CORS_ORIGINS="http://localhost:5173"
-        MEDIA_STORAGE_PROVIDER="local"
+        // For db testing
+        TEST_DATABASE_URL = "postgresql://aipost_test:aipost_test_password@127.0.0.1:5433/aipost_test"
+        TEST_ENCRYPTION_KEY = "123456789012345678901234567890123456789012345678901234567890"
+        TEST_CORS_ORIGINS="http://localhost:5173"
+        TEST_MEDIA_STORAGE_PROVIDER="local"
     }
 
     stages {
@@ -42,37 +44,52 @@ pipeline {
                       -p 5433:5432 \
                       postgres:16
 
-                    npx prisma migrate deploy
-                    npx prisma migrate status
-
-                '''
-            }
-        }
-
-        stage('Debug Database') {
-            steps {
-                sh '''
-                    node -e "
-                    const u = new URL(process.env.DATABASE_URL);
-                    console.log('DB host:', u.hostname);
-                    console.log('DB port:', u.port);
-                    console.log('DB name:', u.pathname);
-                    "
                 '''
             }
         }
 
         stage('Generate Prisma Client') {
             steps {
-                sh 'npx prisma generate'
+                withEnv([
+                    "DATABASE_URL=${TEST_DATABASE_URL}",
+                    "TEST_ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}",
+                    "CORS_ORIGINSL=${TEST_CORS_ORIGINS}",
+                    "MEDIA_STORAGE_PROVIDER=${TEST_MEDIA_STORAGE_PROVIDER}"
+                ]) {
+                    sh 'npx prisma generate'
+                }
+            }
+        }
+
+        stage('Prepare Test Database') {
+            steps {
+                withEnv([
+                    "DATABASE_URL=${TEST_DATABASE_URL}"
+                    "TEST_ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}"
+                    "CORS_ORIGINSL=${TEST_CORS_ORIGINS}"
+                    "MEDIA_STORAGE_PROVIDER=${TEST_MEDIA_STORAGE_PROVIDER}"
+                ]) {
+                    sh '''
+                        npx prisma migrate deploy
+                        npx prisma migrate status
+                    '''
+                }
             }
         }
 
         stage('Test') {
             steps {
-                sh 'npm test'
+                withEnv([
+                    "DATABASE_URL=${TEST_DATABASE_URL}"
+                    "TEST_ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}"
+                    "CORS_ORIGINSL=${TEST_CORS_ORIGINS}"
+                    "MEDIA_STORAGE_PROVIDER=${TEST_MEDIA_STORAGE_PROVIDER}"
+                ]) {
+                    sh 'npm test'
+                }
             }
         }
+
 
         stage('Build') {
             steps {
@@ -88,21 +105,36 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    env.IMAGE_URI =
+                    env.RUNTIME_IMAGE_URI =
                         "${env.ECR_REGISTRY}/${env.ECR_REPOSITORY}:${env.IMAGE_TAG}"
 
-                    echo "Docker image tag: ${env.IMAGE_TAG}"
-                    echo "Docker image URI: ${env.IMAGE_URI}"
+                    env.MIGRATION_IMAGE_TAG =
+                        "migration-${env.IMAGE_TAG}"
+
+                    env.MIGRATION_IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.ECR_REPOSITORY}:${env.MIGRATION_IMAGE_TAG}"
+
+                    echo "Docker Runtime image tag: ${env.IMAGE_TAG}"
+                    echo "Docker Runtime image URI: ${env.RUNTIME_IMAGE_URI}"
+                    echo "Docker Migration image tag: ${env.MIGRATION_IMAGE_TAG}"
+                    echo "Docker Migration image URI: ${env.MIGRATION_IMAGE_URI}"
                 }
             }
         }
+
 
         stage('Docker Build') {
             steps {
                 sh '''
                     docker build \
-                    -t ${IMAGE_URI} \
-                    .
+                      --target runtime \
+                      -t "${RUNTIME_IMAGE_URI}" \
+                      .
+
+                    docker build \
+                      --target migration \
+                      -t "${MIGRATION_IMAGE_URI}" \
+                      .
                 '''
             }
         }
@@ -122,15 +154,42 @@ pipeline {
         stage('Push Image to ECR') {
             steps {
                 sh '''
-                    docker push ${IMAGE_URI}
+                    docker push "${RUNTIME_IMAGE_URI}"
+                    docker push "${MIGRATION_IMAGE_URI}"
 
                     docker tag \
-                        ${IMAGE_URI} \
-                        ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+                      "${RUNTIME_IMAGE_URI}" \
+                      "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
 
                     docker push \
-                        ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+                      "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
                 '''
+            }
+        }
+
+        stage('Migrate Production Database') {
+            steps {
+                script {
+                    def databaseUrl = sh(
+                        script: '''
+                            aws ssm get-parameter \
+                            --name "${DATABASE_URL_PARAMETER}" \
+                            --with-decryption \
+                            --region "${AWS_REGION}" \
+                            --query 'Parameter.Value' \
+                            --output text
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    withEnv(["DATABASE_URL=${databaseUrl}"]) {
+                        sh '''
+                            docker run --rm \
+                            -e DATABASE_URL \
+                            "${MIGRATION_IMAGE_URI}"
+                        '''
+                    }
+                }
             }
         }
 
@@ -155,9 +214,34 @@ pipeline {
                 '''
             }
         }
+        // Check current ASG capacity, if = 0 skip deploying and refresh polling stage
+        stage('Check ASG Capacity') {
+            steps {
+                script {
+                    env.ASG_DESIRED_CAPACITY = sh(
+                        script: '''
+                            aws autoscaling describe-auto-scaling-groups \
+                              --auto-scaling-group-names "${BACKEND_ASG_NAME}" \
+                              --region "${AWS_REGION}" \
+                              --query 'AutoScalingGroups[0].DesiredCapacity' \
+                              --output text
+                        ''',
+                        returnStdout: true
+                    ).trim()
 
-// Adjust Min Healthy Percentage to 50 or 80 during prod
+                    echo "ASG desired capacity: ${env.ASG_DESIRED_CAPACITY}"
+                }
+            }
+        }
+
+        // Adjust Min Healthy Percentage to 50 or 80 during prod
         stage('Deploy to EC2 ASG') {
+            when {
+                expression {
+                    env.ASG_DESIRED_CAPACITY != '0'
+                }
+            }
+
             steps {
                 script {
                     env.INSTANCE_REFRESH_ID = sh(
@@ -180,57 +264,113 @@ pipeline {
             }
         }
 
-// Polling stage to track deployment progress, does not add anything
+        // Polling stage to track deployment progress, does not add anything
         stage('Wait for ASG Deployment') {
+            when {
+                expression {
+                    env.ASG_DESIRED_CAPACITY != '0'
+                }
+            }
+
+            options {
+                timeout(time: 15, unit: 'MINUTES')
+            }
+
             steps {
                 sh '''
                     set -e
 
                     while true; do
-                    STATUS=$(aws autoscaling describe-instance-refreshes \
+
+                      STATUS=$(aws autoscaling describe-instance-refreshes \
                         --auto-scaling-group-name "${BACKEND_ASG_NAME}" \
                         --instance-refresh-ids "${INSTANCE_REFRESH_ID}" \
                         --region "${AWS_REGION}" \
                         --query 'InstanceRefreshes[0].Status' \
                         --output text)
 
-                    echo "Instance Refresh status: ${STATUS}"
+                      PERCENTAGE=$(aws autoscaling describe-instance-refreshes \
+                        --auto-scaling-group-name "${BACKEND_ASG_NAME}" \
+                        --instance-refresh-ids "${INSTANCE_REFRESH_ID}" \
+                        --region "${AWS_REGION}" \
+                        --query 'InstanceRefreshes[0].PercentageComplete' \
+                        --output text)
 
-                    case "${STATUS}" in
-                        Successful)
-                        exit 0
-                        ;;
+                      INSTANCES_LEFT=$(aws autoscaling describe-instance-refreshes \
+                        --auto-scaling-group-name "${BACKEND_ASG_NAME}" \
+                        --instance-refresh-ids "${INSTANCE_REFRESH_ID}" \
+                        --region "${AWS_REGION}" \
+                        --query 'InstanceRefreshes[0].InstancesToUpdate' \
+                        --output text)
 
-                        Failed|Cancelled|RollbackFailed|RollbackSuccessful)
-                        echo "Deployment failed with status: ${STATUS}"
-                        exit 1
-                        ;;
+                      REASON=$(aws autoscaling describe-instance-refreshes \
+                        --auto-scaling-group-name "${BACKEND_ASG_NAME}" \
+                        --instance-refresh-ids "${INSTANCE_REFRESH_ID}" \
+                        --region "${AWS_REGION}" \
+                        --query 'InstanceRefreshes[0].StatusReason' \
+                        --output text)
 
-                        *)
-                        sleep 15
-                        ;;
-                    esac
+                        echo "Instance Refresh ID: ${INSTANCE_REFRESH_ID}"
+                        echo "Status: ${STATUS}"
+                        echo "Progress: ${PERCENTAGE}%"
+                        echo "Instances remaining: ${INSTANCES_LEFT}"
+                        echo "Reason: ${STATUS_REASON}"
+                        echo ""
+
+                        case "${STATUS}" in
+                            Successful)
+                                exit 0
+                                ;;
+
+                            Failed|Cancelled|RollbackFailed)
+                                echo "Deployment failed: ${STATUS}"
+                                exit 1
+                                ;;
+
+                            RollbackSuccessful)
+                                echo "Deployment was rolled back."
+                                exit 1
+                                ;;
+
+                            *)
+                                sleep 15
+                                ;;
+                        esac
                     done
                 '''
             }
         }
 
         stage('Verify Deployment') {
+            options {
+                timeout(time: 5, unit: 'MINUTES')
+            }
+
             steps {
                 sh '''
                     set -e
 
-                    echo "Checking liveness..."
+                    echo "Checking backend liveness..."
+
                     curl --fail \
+                    --silent \
+                    --show-error \
                     --retry 10 \
                     --retry-delay 10 \
                     https://api.jeblearning.pro.vn/health
 
-                    echo "Checking readiness..."
+                    echo ""
+                    echo "Checking backend readiness..."
+
                     curl --fail \
+                    --silent \
+                    --show-error \
                     --retry 10 \
                     --retry-delay 10 \
                     https://api.jeblearning.pro.vn/health/ready
+
+                    echo ""
+                    echo "Backend deployment verified."
                 '''
             }
         }
@@ -242,7 +382,14 @@ pipeline {
         }
 
         success {
-            echo 'AIPost backend CI succeeded.'
+            sh '''
+                docker image rm "${RUNTIME_IMAGE_URI}" || true
+                docker image rm "${MIGRATION_IMAGE_URI}" || true
+                docker image rm \
+                  "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest" || true
+            '''
+
+            echo 'AIPost backend CI/CD completed successfully.'
         }
 
         failure {
