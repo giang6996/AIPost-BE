@@ -53,7 +53,7 @@ pipeline {
                 withEnv([
                     "DATABASE_URL=${TEST_DATABASE_URL}",
                     "ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}",
-                    "CORS_ORIGINSL=${TEST_CORS_ORIGINS}",
+                    "CORS_ORIGINS=${TEST_CORS_ORIGINS}",
                     "MEDIA_STORAGE_PROVIDER=${TEST_MEDIA_STORAGE_PROVIDER}"
                 ]) {
                     sh 'npx prisma generate'
@@ -64,9 +64,9 @@ pipeline {
         stage('Prepare Test Database') {
             steps {
                 withEnv([
-                    "DATABASE_URL=${TEST_DATABASE_URL}"
-                    "ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}"
-                    "CORS_ORIGINSL=${TEST_CORS_ORIGINS}"
+                    "DATABASE_URL=${TEST_DATABASE_URL}",
+                    "ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}",
+                    "CORS_ORIGINS=${TEST_CORS_ORIGINS}",
                     "MEDIA_STORAGE_PROVIDER=${TEST_MEDIA_STORAGE_PROVIDER}"
                 ]) {
                     sh '''
@@ -80,9 +80,9 @@ pipeline {
         stage('Test') {
             steps {
                 withEnv([
-                    "DATABASE_URL=${TEST_DATABASE_URL}"
-                    "ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}"
-                    "CORS_ORIGINSL=${TEST_CORS_ORIGINS}"
+                    "DATABASE_URL=${TEST_DATABASE_URL}",
+                    "ENCRYPTION_KEY=${TEST_ENCRYPTION_KEY}",
+                    "CORS_ORIGINS=${TEST_CORS_ORIGINS}",
                     "MEDIA_STORAGE_PROVIDER=${TEST_MEDIA_STORAGE_PROVIDER}"
                 ]) {
                     sh 'npm test'
