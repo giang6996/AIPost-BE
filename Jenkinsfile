@@ -42,7 +42,7 @@ pipeline {
                     env.BACKEND_ASG_NAME = sh(
                         script: """
                             aws ssm get-parameter \
-                            --name "${env.SSM_PARAMETER_PREFIX}/backend/ASG_NAME" \
+                            --name "${env.SSM_PARAMETER_PREFIX}/backend/BACKEND_ASG_NAME" \
                             --region "${AWS_REGION}" \
                             --query 'Parameter.Value' \
                             --output text
