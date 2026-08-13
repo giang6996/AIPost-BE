@@ -4,12 +4,7 @@ pipeline {
     environment {
         AWS_REGION = "ap-southeast-1"
 
-        BACKEND_ASG_NAME = 'aipost-ec2-backend-asg'
-        IMAGE_TAG_PARAMETER = '/aipost/ec2/backend/IMAGE_TAG'
-        DATABASE_URL_PARAMETER ='/aipost/ec2/backend/DATABASE_URL'
-
-        ECR_REGISTRY = "596261186564.dkr.ecr.ap-southeast-1.amazonaws.com"
-        ECR_REPOSITORY = "aipost-ec2-backend"
+        ENVIRONMENT_BOOTSTRAP_PARAMETER = "/aipost-bootstrap/ec2"
 
         // For db testing
         TEST_DATABASE_URL = "postgresql://aipost_test:aipost_test_password@127.0.0.1:5433/aipost_test"
@@ -22,6 +17,72 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Load Deployment Config') {
+            steps {
+                script {
+                    env.SSM_PARAMETER_PREFIX = sh(
+                        script: '''
+                            aws ssm get-parameter \
+                            --name "${ENVIRONMENT_BOOTSTRAP_PARAMETER}" \
+                            --region "${AWS_REGION}" \
+                            --query 'Parameter.Value' \
+                            --output text
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+
+                    env.IMAGE_TAG_PARAMETER = "${env.SSM_PARAMETER_PREFIX}/backend/IMAGE_TAG"
+
+                    env.DATABASE_URL_PARAMETER = "${env.SSM_PARAMETER_PREFIX}/backend/DATABASE_URL"
+
+                    env.BACKEND_ASG_NAME = sh(
+                        script: """
+                            aws ssm get-parameter \
+                            --name "${env.SSM_PARAMETER_PREFIX}/backend/ASG_NAME" \
+                            --region "${AWS_REGION}" \
+                            --query 'Parameter.Value' \
+                            --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    env.ECR_REPOSITORY = sh(
+                        script: """
+                            aws ssm get-parameter \
+                            --name "${env.SSM_PARAMETER_PREFIX}/backend/ECR_REPOSITORY" \
+                            --region "${AWS_REGION}" \
+                            --query 'Parameter.Value' \
+                            --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    env.ECR_REGISTRY = sh(
+                        script: """
+                            aws ssm get-parameter \
+                            --name "${env.SSM_PARAMETER_PREFIX}/backend/ECR_REGISTRY" \
+                            --region "${AWS_REGION}" \
+                            --query 'Parameter.Value' \
+                            --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    env.BACKEND_API_URL = sh(
+                        script: """
+                            aws ssm get-parameter \
+                            --name "${env.SSM_PARAMETER_PREFIX}/backend/API_URL" \
+                            --region "${AWS_REGION}" \
+                            --query 'Parameter.Value' \
+                            --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
+                }
             }
         }
 
@@ -371,7 +432,7 @@ pipeline {
                     --show-error \
                     --retry 10 \
                     --retry-delay 10 \
-                    https://api.jeblearning.pro.vn/health
+                    "${BACKEND_API_URL}/health"
 
                     echo ""
                     echo "Checking backend readiness..."
@@ -381,7 +442,7 @@ pipeline {
                     --show-error \
                     --retry 10 \
                     --retry-delay 10 \
-                    https://api.jeblearning.pro.vn/health/ready
+                    "${BACKEND_API_URL}/health/ready"
 
                     echo ""
                     echo "Backend deployment verified."
