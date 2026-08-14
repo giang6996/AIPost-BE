@@ -175,13 +175,13 @@ pipeline {
                     ).trim()
 
                     env.RUNTIME_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.ECR_REPOSITORY}:${env.IMAGE_TAG}"
+                        "${env.ECR_REGISTRY}:${env.IMAGE_TAG}"
 
                     env.MIGRATION_IMAGE_TAG =
                         "migration-${env.IMAGE_TAG}"
 
                     env.MIGRATION_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.ECR_REPOSITORY}:${env.MIGRATION_IMAGE_TAG}"
+                        "${env.ECR_REGISTRY}:${env.MIGRATION_IMAGE_TAG}"
 
                     echo "Docker Runtime image tag: ${env.IMAGE_TAG}"
                     echo "Docker Runtime image URI: ${env.RUNTIME_IMAGE_URI}"
@@ -228,10 +228,10 @@ pipeline {
 
                     docker tag \
                       "${RUNTIME_IMAGE_URI}" \
-                      "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+                      "${ECR_REGISTRY}:latest"
 
                     docker push \
-                      "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+                      "${ECR_REGISTRY}:latest"
                 '''
             }
         }
@@ -279,7 +279,7 @@ pipeline {
             steps {
                 sh '''
                     docker image rm ${IMAGE_URI} || true
-                    docker image rm ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest || true
+                    docker image rm ${ECR_REGISTRY}:latest || true
                 '''
             }
         }
@@ -461,7 +461,7 @@ pipeline {
                 docker image rm "${RUNTIME_IMAGE_URI}" || true
                 docker image rm "${MIGRATION_IMAGE_URI}" || true
                 docker image rm \
-                  "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest" || true
+                  "${ECR_REGISTRY}:latest" || true
             '''
 
             echo 'AIPost backend CI/CD completed successfully.'
