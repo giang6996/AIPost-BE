@@ -50,21 +50,10 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    env.ECR_REPOSITORY = sh(
+                    env.ECR_REPOSITORY_URL = sh(
                         script: """
                             aws ssm get-parameter \
-                            --name "${env.SSM_PARAMETER_PREFIX}/backend/ECR_REPOSITORY" \
-                            --region "${AWS_REGION}" \
-                            --query 'Parameter.Value' \
-                            --output text
-                        """,
-                        returnStdout: true
-                    ).trim()
-
-                    env.ECR_REGISTRY = sh(
-                        script: """
-                            aws ssm get-parameter \
-                            --name "${env.SSM_PARAMETER_PREFIX}/backend/ECR_REGISTRY" \
+                            --name "${env.SSM_PARAMETER_PREFIX}/backend/ECR_REPOSITORY_URL" \
                             --region "${AWS_REGION}" \
                             --query 'Parameter.Value' \
                             --output text
@@ -175,13 +164,13 @@ pipeline {
                     ).trim()
 
                     env.RUNTIME_IMAGE_URI =
-                        "${env.ECR_REGISTRY}:${env.IMAGE_TAG}"
+                        "${env.ECR_REPOSITORY_URL}:${env.IMAGE_TAG}"
 
                     env.MIGRATION_IMAGE_TAG =
                         "migration-${env.IMAGE_TAG}"
 
                     env.MIGRATION_IMAGE_URI =
-                        "${env.ECR_REGISTRY}:${env.MIGRATION_IMAGE_TAG}"
+                        "${env.ECR_REPOSITORY_URL}:${env.MIGRATION_IMAGE_TAG}"
 
                     echo "Docker Runtime image tag: ${env.IMAGE_TAG}"
                     echo "Docker Runtime image URI: ${env.RUNTIME_IMAGE_URI}"
@@ -215,7 +204,7 @@ pipeline {
                     --region ${AWS_REGION} \
                     | docker login \
                     --username AWS \
-                    --password-stdin ${ECR_REGISTRY}
+                    --password-stdin ${ECR_REPOSITORY_URL}
                 '''
             }
         }
@@ -228,10 +217,10 @@ pipeline {
 
                     docker tag \
                       "${RUNTIME_IMAGE_URI}" \
-                      "${ECR_REGISTRY}:latest"
+                      "${ECR_REPOSITORY_URL}:latest"
 
                     docker push \
-                      "${ECR_REGISTRY}:latest"
+                      "${ECR_REPOSITORY_URL}:latest"
                 '''
             }
         }
@@ -279,7 +268,7 @@ pipeline {
             steps {
                 sh '''
                     docker image rm ${IMAGE_URI} || true
-                    docker image rm ${ECR_REGISTRY}:latest || true
+                    docker image rm ${ECR_REPOSITORY_URL}:latest || true
                 '''
             }
         }
@@ -461,7 +450,7 @@ pipeline {
                 docker image rm "${RUNTIME_IMAGE_URI}" || true
                 docker image rm "${MIGRATION_IMAGE_URI}" || true
                 docker image rm \
-                  "${ECR_REGISTRY}:latest" || true
+                  "${ECR_REPOSITORY_URL}:latest" || true
             '''
 
             echo 'AIPost backend CI/CD completed successfully.'
