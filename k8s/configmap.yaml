@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: aipost-backend-config
+  namespace: aipost
+
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+
+  AWS_REGION: "ap-southeast-1"
+
+  MEDIA_STORAGE_PROVIDER: "s3"
+ 
+  # Replace this to match project parameter prefix
+  SSM_PARAMETER_PREFIX: "/aipost/eks/backend" 

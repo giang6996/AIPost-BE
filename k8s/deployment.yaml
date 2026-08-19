@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: aipost-backend
+  namespace: aipost
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: aipost-backend
+
+  template:
+    metadata:
+      labels:
+        app: aipost-backend
+
+    spec:
+      serviceAccountName: aipost-backend
+
+      containers:
+        - name: backend
+
+          image: ECR_REPOSITORY_URL:SHA
+
+          ports:
+            - containerPort: 3000
+
+          env:
+            - name: PORT
