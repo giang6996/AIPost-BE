@@ -13,5 +13,8 @@ data:
 
   MEDIA_STORAGE_PROVIDER: "s3"
  
-  # Replace this to match project parameter prefix
-  SSM_PARAMETER_PREFIX: "/aipost/eks/backend" 
+  S3_BUCKET_NAME: "aipost-eks-media-596261186564"
+
+  CORS_ORIGINS: "https://app.jeblearning.pro.vn,http://localhost:5173"
+
+  MEDIA_PUBLIC_BASE_URL: ""

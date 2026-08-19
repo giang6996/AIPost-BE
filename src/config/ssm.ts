@@ -34,7 +34,27 @@ async function loadParameter(
   return value
 }
 
-export async function loadSecretsFromSsm() {
+export async function loadRuntimeSecrets() {
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+  const hasEncryptionKey = Boolean(process.env.ENCRYPTION_KEY);
+
+  if (hasDatabaseUrl && hasEncryptionKey) {
+    return;
+  }
+
+  const prefix = process.env.SSM_PARAMETER_PREFIX;
+
+  if (!prefix) {
+    throw new Error(
+      "DATABASE_URL and ENCRYPTION_KEY are required. " +
+      "Provide them through the environment or configure SSM_PARAMETER_PREFIX."
+    );
+  }
+
+  await loadSecretsFromSsm();
+}
+
+async function loadSecretsFromSsm() {
   // These settings are expected to come from the AWS runtime, not from checked-in files.
   const region =
     process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? null

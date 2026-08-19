@@ -23,10 +23,63 @@ spec:
       containers:
         - name: backend
 
-          image: ECR_REPOSITORY_URL:SHA
+          image: 596261186564.dkr.ecr.ap-southeast-1.amazonaws.com/aipost-eks-backend:3a3efb600b96
+
+          imagePullPolicy: IfNotPresent
 
           ports:
-            - containerPort: 3000
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: aipost-backend-config
 
           env:
-            - name: PORT
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: aipost-backend-secrets
+                  key: DATABASE_URL
+
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aipost-backend-secrets
+                  key: ENCRYPTION_KEY
+
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+      volumes:
+        - name: secrets-store
+
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+
+            volumeAttributes:
+              secretProviderClass: aipost-backend-secrets

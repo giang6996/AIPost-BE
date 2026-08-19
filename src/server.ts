@@ -39,7 +39,7 @@ async function bootstrap() {
   // The app still boots locally from .env files, but production should resolve secrets from AWS first.
   if (process.env.NODE_ENV === 'production') {
     // Import the SSM helper lazily so local/test runs do not need AWS credentials or AWS SDK work.
-    const { getSsmBootstrapSummary, loadSecretsFromSsm } = await import('./config/ssm.js')
+    const { getSsmBootstrapSummary, loadRuntimeSecrets } = await import('./config/ssm.js')
 
     // Log the AWS region/path only so we can trace the bootstrap source without printing secrets.
     const summary = getSsmBootstrapSummary()
@@ -50,7 +50,7 @@ async function bootstrap() {
     )
 
     // Pull DATABASE_URL and ENCRYPTION_KEY into process.env before the rest of the app loads.
-    await loadSecretsFromSsm()
+    await loadRuntimeSecrets()
   }
 
   // Import the app only after env secrets are present, because app.ts and env.ts validate config at load time.
