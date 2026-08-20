@@ -23,7 +23,7 @@ spec:
       containers:
         - name: backend
 
-          image: 596261186564.dkr.ecr.ap-southeast-1.amazonaws.com/aipost-eks-backend:3a3efb600b96
+          image: 596261186564.dkr.ecr.ap-southeast-1.amazonaws.com/aipost-eks-backend:d6bfd4e79aa2
 
           imagePullPolicy: IfNotPresent
 
