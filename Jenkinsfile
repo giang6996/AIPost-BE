@@ -1,10 +1,19 @@
 pipeline {
     agent any
 
+    parameters {
+        choice(
+            name: 'DEPLOY_TARGET',
+            choices: ['eks', 'ec2'],
+            description: 'Active backend deployment target'
+        )
+    }
+
     environment {
+
         AWS_REGION = "ap-southeast-1"
 
-        ENVIRONMENT_BOOTSTRAP_PARAMETER = "/aipost-bootstrap/ec2"
+        ENVIRONMENT_BOOTSTRAP_PARAMETER = "/aipost-bootstrap/active"
 
         // For db testing
         TEST_DATABASE_URL = "postgresql://aipost_test:aipost_test_password@127.0.0.1:5433/aipost_test"
@@ -23,6 +32,8 @@ pipeline {
         stage('Load Deployment Config') {
             steps {
                 script {
+                    env.DEPLOY_TARGET = params.DEPLOY_TARGET
+
                     env.SSM_PARAMETER_PREFIX = sh(
                         script: '''
                             aws ssm get-parameter \
@@ -34,21 +45,39 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-
-                    env.IMAGE_TAG_PARAMETER = "${env.SSM_PARAMETER_PREFIX}/backend/IMAGE_TAG"
-
                     env.DATABASE_URL_PARAMETER = "${env.SSM_PARAMETER_PREFIX}/backend/DATABASE_URL"
 
-                    env.BACKEND_ASG_NAME = sh(
-                        script: """
-                            aws ssm get-parameter \
-                            --name "${env.SSM_PARAMETER_PREFIX}/backend/BACKEND_ASG_NAME" \
-                            --region "${AWS_REGION}" \
-                            --query 'Parameter.Value' \
-                            --output text
-                        """,
-                        returnStdout: true
-                    ).trim()
+                    if (env.DEPLOY_TARGET == 'ec2') {
+                        env.IMAGE_TAG_PARAMETER = "${env.SSM_PARAMETER_PREFIX}/backend/IMAGE_TAG"                  
+
+                        env.BACKEND_ASG_NAME = sh(
+                            script: """
+                                aws ssm get-parameter \
+                                --name "${env.SSM_PARAMETER_PREFIX}/backend/BACKEND_ASG_NAME" \
+                                --region "${AWS_REGION}" \
+                                --query 'Parameter.Value' \
+                                --output text
+                            """,
+                            returnStdout: true
+                        ).trim()
+                    }
+
+                    if (env.DEPLOY_TARGET == 'eks') {
+                        env.EKS_CLUSTER_NAME = sh(
+                            script: """
+                                aws ssm get-parameter \
+                                --name "${env.SSM_PARAMETER_PREFIX}/infrastructure/EKS_CLUSTER_NAME" \
+                                --region "${AWS_REGION}" \
+                                --query 'Parameter.Value' \
+                                --output text
+                            """,
+                            returnStdout: true
+                        ).trim()
+
+                        env.K8S_NAMESPACE = "aipost"
+                        env.K8S_DEPLOYMENT = "aipost-backend"
+                        env.K8S_CONTAINER = "backend"
+                    }
 
                     env.ECR_REPOSITORY_URL = sh(
                         script: """
@@ -252,6 +281,12 @@ pipeline {
         }
 
         stage('Publish Release Version') {
+            when {
+                expression {
+                    env.DEPLOY_TARGET == 'ec2'
+                }
+            }
+
             steps {
                 sh '''
                     aws ssm put-parameter \
@@ -267,13 +302,20 @@ pipeline {
         stage('Cleanup Local Docker Image') {
             steps {
                 sh '''
-                    docker image rm ${IMAGE_URI} || true
+                    docker image rm "${RUNTIME_IMAGE_URI}" || true
+                    docker image rm "${MIGRATION_IMAGE_URI}" || true
                     docker image rm ${ECR_REPOSITORY_URL}:latest || true
                 '''
             }
         }
         // Check current ASG capacity, if = 0 skip deploying and refresh polling stage
         stage('Check ASG Capacity') {
+            when {
+                expression {
+                    env.DEPLOY_TARGET == 'ec2'
+                }
+            }
+
             steps {
                 script {
                     env.ASG_DESIRED_CAPACITY = sh(
@@ -296,7 +338,8 @@ pipeline {
         stage('Deploy to EC2 ASG') {
             when {
                 expression {
-                    env.ASG_DESIRED_CAPACITY != '0'
+                    env.ASG_DESIRED_CAPACITY != '0' &&
+                    env.DEPLOY_TARGET == 'ec2'
                 }
             }
 
@@ -326,7 +369,8 @@ pipeline {
         stage('Wait for ASG Deployment') {
             when {
                 expression {
-                    env.ASG_DESIRED_CAPACITY != '0'
+                    env.ASG_DESIRED_CAPACITY != '0' &&
+                    env.DEPLOY_TARGET == 'ec2'
                 }
             }
 
@@ -372,7 +416,7 @@ pipeline {
                         echo "Status: ${STATUS}"
                         echo "Progress: ${PERCENTAGE}%"
                         echo "Instances remaining: ${INSTANCES_LEFT}"
-                        echo "Reason: ${STATUS_REASON}"
+                        echo "Reason: ${REASON}"
                         echo ""
 
                         case "${STATUS}" in
@@ -399,10 +443,66 @@ pipeline {
             }
         }
 
+        stage('Configure EKS Access') {
+            when {
+                expression {
+                    env.DEPLOY_TARGET == 'eks'
+                }
+            }
+
+            steps {
+                sh '''
+                    set -e
+
+                    aws eks update-kubeconfig \
+                    --name "${EKS_CLUSTER_NAME}" \
+                    --region "${AWS_REGION}"
+
+                    kubectl get deployment \
+                    "${K8S_DEPLOYMENT}" \
+                    -n "${K8S_NAMESPACE}"
+                '''
+            }
+        }
+
+        stage('Deploy to EKS') {
+            when {
+                expression {
+                    env.DEPLOY_TARGET == 'eks'
+                }
+            }
+
+            options {
+                timeout(time: 5, unit: 'MINUTES')
+            }
+
+            steps {
+                sh '''
+                    set -e
+
+                    echo "Deploying ${RUNTIME_IMAGE_URI} to EKS..."
+
+                    kubectl set image \
+                    deployment/"${K8S_DEPLOYMENT}" \
+                    "${K8S_CONTAINER}"="${RUNTIME_IMAGE_URI}" \
+                    -n "${K8S_NAMESPACE}"
+
+                    kubectl rollout status \
+                    deployment/"${K8S_DEPLOYMENT}" \
+                    -n "${K8S_NAMESPACE}" \
+                    --timeout=180s
+                '''
+            }
+        }
+
         stage('Verify Deployment') {
             when {
                 expression {
-                    env.ASG_DESIRED_CAPACITY != '0'
+                    env.DEPLOY_TARGET == 'eks' ||
+                    (
+                        env.DEPLOY_TARGET == 'ec2' &&
+                        env.ASG_DESIRED_CAPACITY != '0'
+                    )
                 }
             }
 

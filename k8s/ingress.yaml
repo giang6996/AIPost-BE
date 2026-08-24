@@ -7,25 +7,27 @@ metadata:
 
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
-
     alb.ingress.kubernetes.io/target-type: ip
 
-    alb.ingress.kubernetes.io/healthcheck-path: /health/ready
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-1:596261186564:certificate/c3113db6-0acf-4b0f-a71d-6442d31c219e
 
-    alb.ingress.kubernetes.io/healthcheck-port: "3000"
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+
+    alb.ingress.kubernetes.io/healthcheck-path: /health/ready
+    alb.ingress.kubernetes.io/healthcheck-port: traffic-port
 
 spec:
   ingressClassName: alb
 
   rules:
-    - http:
+    - host: api.jeblearning.pro.vn
+      http:
         paths:
           - path: /
             pathType: Prefix
-
             backend:
               service:
                 name: aipost-backend
-
                 port:
                   number: 80
