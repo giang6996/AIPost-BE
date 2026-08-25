@@ -280,6 +280,26 @@ pipeline {
             }
         }
 
+        stage('Seed Production Database') {
+            steps {
+                sh '''
+                    set -e
+
+                    DATABASE_URL=$(aws ssm get-parameter \
+                    --name "${DATABASE_URL_PARAMETER}" \
+                    --with-decryption \
+                    --region "${AWS_REGION}" \
+                    --query 'Parameter.Value' \
+                    --output text)
+
+                    docker run --rm \
+                    -e DATABASE_URL="${DATABASE_URL}" \
+                    "${MIGRATION_IMAGE_URI}" \
+                    npx prisma db seed
+                '''
+            }
+        }
+
         stage('Publish Release Version') {
             when {
                 expression {

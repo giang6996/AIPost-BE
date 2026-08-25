@@ -4,7 +4,11 @@ import bcrypt from 'bcryptjs'
 const prisma = new PrismaClient()
 
 async function main() {
-  const passwordHash = bcrypt.hashSync('test123@2abc', 12)
+  const initialAdminEmail =
+    process.env.INITIAL_ADMIN_EMAIL ?? 'test@gmail.com' // Set env variable
+
+  const initialAdminPassword =
+    process.env.INITIAL_ADMIN_PASSWORD ?? 'test123@abc' // Set env variable
 
   const adminRole = await prisma.role.upsert({
     where: { name: 'admin' },
@@ -24,35 +28,32 @@ async function main() {
     },
   })
 
-  await prisma.user.upsert({
-    where: { id: 1 },
-    update: {
-      name: 'admin',
-      email: 'test@gmail.com',
-      roleId: adminRole.id,
+  const adminUser = await prisma.user.upsert({
+    where: {
+      email: initialAdminEmail,
     },
+    update: {},
     create: {
-      id: 1,
       name: 'admin',
-      email: 'test@gmail.com',
+      email: initialAdminEmail,
       roleId: adminRole.id,
     },
   })
+
+  const passwordHash = bcrypt.hashSync(initialAdminPassword, 12)
 
   await prisma.userCredential.upsert({
-    where: { userId: 1 },
-    update: {
-      passwordHash,
+    where: {
+      userId: adminUser.id,
     },
+    update: {},
     create: {
-      userId: 1,
+      userId: adminUser.id,
       passwordHash,
     },
   })
 
-  console.log('Roles and admin user seeded successfully')
-
-
+  console.log('Required roles and initial admin account are present')
 }
 
 main()
