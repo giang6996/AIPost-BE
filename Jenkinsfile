@@ -35,13 +35,13 @@ pipeline {
                     env.DEPLOY_TARGET = params.DEPLOY_TARGET
 
                     env.SSM_PARAMETER_PREFIX = sh(
-                        script: '''
+                        script: """
                             aws ssm get-parameter \
                             --name "${ENVIRONMENT_BOOTSTRAP_PARAMETER}" \
                             --region "${AWS_REGION}" \
                             --query 'Parameter.Value' \
                             --output text
-                        ''',
+                        """,
                         returnStdout: true
                     ).trim()
 
