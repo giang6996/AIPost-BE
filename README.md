@@ -78,7 +78,6 @@ The server listens on `http://localhost:3001` by default.
 - `MEDIA_PUBLIC_BASE_URL` - optional public media base URL for S3 or CDN-backed deployments
 - `S3_BUCKET_NAME` - required when `MEDIA_STORAGE_PROVIDER=s3`
 - `AWS_REGION` - required in production when loading secrets from SSM
-- `SSM_PARAMETER_PREFIX` or `SSM_PARAMETER_PATH` - required in production; points to a parameter path such as `/aipost/prod`
 
 Production secret loading process:
 
