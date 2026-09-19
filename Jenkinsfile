@@ -9,7 +9,7 @@ pipeline {
         choice(
             name: 'DEPLOY_TARGET',
             choices: ['ec2','eks'],
-            description: 'Active backend deployment target'
+            description: 'Active backend deployment target.'
         )
     }
 
