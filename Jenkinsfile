@@ -8,7 +8,7 @@ pipeline {
     parameters {
         choice(
             name: 'DEPLOY_TARGET',
-            choices: ['ec2','eks'],
+            choices: ['eks','ec2'],
             defaultValue: 'ec2',
             description: 'Active backend deployment target'
         )
