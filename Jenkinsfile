@@ -4,8 +4,7 @@ pipeline {
     triggers {
         githubPush()
     }
-
-    // Test Comment
+    
     parameters {
         choice(
             name: 'DEPLOY_TARGET',
