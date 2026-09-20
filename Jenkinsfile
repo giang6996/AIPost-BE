@@ -1,3 +1,13 @@
+def detectTarget() {
+    if (env.SSM_PARAMETER_PREFIX?.endsWith('/ec2')) {
+        return 'ec2'
+    } else if (env.SSM_PARAMETER_PREFIX?.endsWith('/eks')) {
+        return 'eks'
+    } else {
+        error "Unsupported or incorrect active environment: ${env.SSM_PARAMETER_PREFIX}"
+    }
+}
+
 pipeline {
     agent any
 
@@ -8,7 +18,7 @@ pipeline {
     parameters {
         choice(
             name: 'DEPLOY_TARGET',
-            choices: ['ec2','eks'],
+            choices: ['auto','ec2','eks'],
             description: 'Active backend deployment target'
         )
     }
@@ -36,8 +46,6 @@ pipeline {
         stage('Load Deployment Config') {
             steps {
                 script {
-                    env.DEPLOY_TARGET = params.DEPLOY_TARGET
-
                     env.SSM_PARAMETER_PREFIX = sh(
                         script: """
                             aws ssm get-parameter \
@@ -48,6 +56,19 @@ pipeline {
                         """,
                         returnStdout: true
                     ).trim()
+
+                    if (params.DEPLOY_TARGET == 'auto') {
+                        env.DEPLOY_TARGET = detectTarget()
+                    } else {
+                        if (params.DEPLOY_TARGET != detectTarget()) {
+                            error """
+                            Requested target '${params.DEPLOY_TARGET}' does not match
+                            active environment '${detectTarget()}'.
+                            """
+                        }
+
+                        env.DEPLOY_TARGET = params.DEPLOY_TARGET
+                    }
 
                     env.DATABASE_URL_PARAMETER = "${env.SSM_PARAMETER_PREFIX}/backend/DATABASE_URL"
 
